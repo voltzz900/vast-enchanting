@@ -167,3 +167,31 @@ helper = "list.rs"
 bindings = [
   { name = "mods", ty = "&mut Vec<crate::game::native_hooks::NativeMod>", value = "&mut *mods" },
 ]
+
+# Tomes at the anvil: an enchanted item and a tome give a book with its enchantments (both sides work it out alike).
+[[injection]]
+id = "anvil"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_anvil_update"
+helper = "h_anvil.rs"
+bindings = [
+  { name = "left", ty = "&horizon_client::items::ItemStack", value = "left" },
+  { name = "right", ty = "Option<&horizon_client::items::ItemStack>", value = "right" },
+  { name = "output", ty = "&mut Option<horizon_client::items::ItemStack>", value = "&mut *output" },
+  { name = "xp_cost", ty = "&mut i32", value = "&mut *xp_cost" },
+  { name = "material_cost", ty = "&mut i32", value = "&mut *material_cost" },
+]
+
+# A siphon tome's item comes back, plain and worn, once the book is taken.
+[[injection]]
+id = "anvil-taken"
+hook = "anvil_craft_post"
+hook_version = 1
+kind = "HEAD"
+helper = "h_anvil_taken.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "player", ty = "u128", value = "player" },
+  { name = "pos", ty = "[i32; 3]", value = "pos" },
+  { name = "craft", ty = "&horizon_client::menu::AnvilCraft", value = "craft" },
+]

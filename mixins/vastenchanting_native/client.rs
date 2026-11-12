@@ -40,14 +40,16 @@ pub const STATS: &[(&str, f32, f32, f32, f32, i32)] = &[
     ("minecraft:bookshelf", 30.0, 2.0, 0.0, 0.0, 0),
     ("minecraft:chiseled_bookshelf", 30.0, 2.0, 0.0, 0.0, 0),
 ];
-/// (input, result, minimum power, chaos, rarity, maximum power, chaos, rarity; -1 for none).
-pub const INFUSIONS: &[(&str, &str, [f32; 3], [f32; 3])] = &[
-    ("vastenchanting:ember_shelf", "vastenchanting:infused_ember_shelf", [45.0, 30.0, 0.0], [-1.0, -1.0, -1.0]),
-    ("vastenchanting:tide_shelf", "vastenchanting:infused_tide_shelf", [45.0, 15.0, 10.0], [-1.0, -1.0, -1.0]),
-    ("vastenchanting:dormant_abyss_shelf", "vastenchanting:abyss_shelf", [60.0, 40.0, 40.0], [-1.0, -1.0, -1.0]),
-    ("vastenchanting:sight_shelf", "vastenchanting:sight_shelf_ii", [60.0, 20.0, 30.0], [-1.0, -1.0, -1.0]),
-    ("minecraft:carrot", "minecraft:golden_carrot", [20.0, 10.0, 0.0], [20.0, 30.0, -1.0]),
-    ("minecraft:amethyst_block", "minecraft:budding_amethyst", [60.0, 30.0, 50.0], [-1.0, 50.0, -1.0]),
+/// (input, result, minimum power, chaos, rarity, maximum power, chaos, rarity (-1 for none), how many).
+pub const INFUSIONS: &[(&str, &str, [f32; 3], [f32; 3], u32)] = &[
+    ("vastenchanting:ember_shelf", "vastenchanting:infused_ember_shelf", [45.0, 30.0, 0.0], [-1.0, -1.0, -1.0], 1),
+    ("vastenchanting:tide_shelf", "vastenchanting:infused_tide_shelf", [45.0, 15.0, 10.0], [-1.0, -1.0, -1.0], 1),
+    ("vastenchanting:dormant_abyss_shelf", "vastenchanting:abyss_shelf", [60.0, 40.0, 40.0], [-1.0, -1.0, -1.0], 1),
+    ("vastenchanting:sight_shelf", "vastenchanting:sight_shelf_ii", [60.0, 20.0, 30.0], [-1.0, -1.0, -1.0], 1),
+    ("minecraft:carrot", "minecraft:golden_carrot", [20.0, 10.0, 0.0], [20.0, 30.0, -1.0], 1),
+    ("minecraft:amethyst_block", "minecraft:budding_amethyst", [60.0, 30.0, 50.0], [-1.0, 50.0, -1.0], 1),
+    ("vastenchanting:tattered_tome", "vastenchanting:bound_tome", [40.0, 20.0, 30.0], [-1.0, 50.0, -1.0], 2),
+    ("vastenchanting:bound_tome", "vastenchanting:siphon_tome", [55.0, 25.0, 45.0], [-1.0, 70.0, -1.0], 2),
 ];
 // ---- end generated ----
 
@@ -323,7 +325,7 @@ pub struct Offers {
 }
 
 fn infusion_for(item: &str, stats: Stats) -> Option<usize> {
-    INFUSIONS.iter().position(|(input, _, min, max)| {
+    INFUSIONS.iter().position(|(input, _, min, max, _)| {
         let v = [stats.power, stats.chaos, stats.rarity];
         *input == item && (0..3).all(|i| v[i] >= min[i] && (max[i] < 0.0 || v[i] <= max[i]))
     })
@@ -512,7 +514,7 @@ pub(in crate::game) fn menu_button(game: &mut Game<'_>, pos: [i32; 3], entity: &
         return;
     }
     let result = if slot == 2 && let Some(i) = offers.infusion {
-        ItemStack::new(INFUSIONS[i].1, 1)
+        ItemStack::new(INFUSIONS[i].1, INFUSIONS[i].4)
     } else {
         let list = &offers.lists[slot];
         if list.is_empty() {
@@ -629,7 +631,7 @@ pub(in crate::game) fn screen_draw(game: &Game<'_>, block: &str, data: &[i32], b
         let lw = game.native_text_width(&level);
         game.native_text(batch, &level, [ox + r[0] + r[2] - lw - 4.0, oy + r[1] + 6.0], colour, true);
         let text = if i == 2 && data[D_INFUSE] > 0 {
-            lang("vastenchanting.infuse", "Infuse into %s").replacen("%s", &infusion_name(game, data[D_INFUSE] as usize - 1), 1)
+            format!("» {}", infusion_name(game, data[D_INFUSE] as usize - 1))
         } else {
             clue(e, data, i, 0).map_or_else(|| lang("vastenchanting.unknown", "Unknown enchantments"), |c| c.0)
         };
@@ -721,6 +723,11 @@ pub(in crate::game) fn screen_tooltip(game: &Game<'_>, block: &str, data: &[i32]
 /// Shelves' tooltips: what they give a table.
 pub fn tooltip(stack: &ItemStack, lines: &mut Vec<(horizon_client::text::Text, u32)>) {
     use horizon_client::text::Text;
+    if TOMES.contains(&stack.item.as_ref()) {
+        let key = format!("item.{}.desc", stack.item.replacen(':', ".", 1));
+        lines.push((Text::legacy(&format!("§7{}", lang(&key, ""))), u32::MAX));
+        return;
+    }
     let Some((max, power, chaos, rarity, clues)) = block_stats(&stack.item) else { return };
     if !stack.item.starts_with("vastenchanting:") {
         return;
@@ -736,5 +743,83 @@ pub fn tooltip(stack: &ItemStack, lines: &mut Vec<(horizon_client::text::Text, u
     if clues != 0 {
         let line = lang("vastenchanting.shelf.clues", "Clues %s").replacen("%s", &format!("{clues:+}"), 1);
         lines.push((Text::legacy(&format!("§7{line}")), u32::MAX));
+    }
+}
+
+// ---- tomes at the anvil -------------------------------------------------------------------------------------------
+
+const TATTERED: &str = "vastenchanting:tattered_tome";
+const BOUND: &str = "vastenchanting:bound_tome";
+const SIPHON: &str = "vastenchanting:siphon_tome";
+const TOMES: [&str; 3] = [TATTERED, BOUND, SIPHON];
+
+/// The enchantments a tome takes from `left`: all of them, or for a tattered tome about half (at least one), picked
+/// from the item itself so the window and the server pick alike.
+fn tome_takes(tome: &str, left: &ItemStack) -> Vec<(Arc<str>, u32)> {
+    let all = left.enchantments().to_vec();
+    if tome != TATTERED || all.len() <= 1 {
+        return all;
+    }
+    let mut seed: i64 = 0x7A77_E12E;
+    for b in left.item.bytes().chain(all.iter().flat_map(|(id, l)| id.bytes().chain(l.to_le_bytes()))) {
+        seed = seed.wrapping_mul(31).wrapping_add(i64::from(b));
+    }
+    let mut rng = Rng::new(seed ^ i64::from(left.damage));
+    let mut order: Vec<usize> = (0..all.len()).collect();
+    for i in (1..order.len()).rev() {
+        order.swap(i, rng.int(i as i32 + 1) as usize);
+    }
+    let keep = all.len().div_ceil(2);
+    let mut chosen: Vec<usize> = order[..keep].to_vec();
+    chosen.sort_unstable();
+    chosen.into_iter().map(|i| all[i].clone()).collect()
+}
+
+/// `native_anvil_update`: an enchanted item on the left and a tome on the right give an enchanted book with the
+/// enchantments the tome takes, for a few levels a enchantment and one tome.
+pub fn anvil(left: &ItemStack, right: Option<&ItemStack>, output: &mut Option<ItemStack>, xp_cost: &mut i32, material_cost: &mut i32) {
+    let Some(right) = right else { return };
+    let Some(tome) = TOMES.iter().copied().find(|t| *t == right.item.as_ref()) else { return };
+    let taken = if is_book(&left.item) || left.item.as_ref() == "minecraft:enchanted_book" { Vec::new() } else { tome_takes(tome, left) };
+    if taken.is_empty() {
+        *output = None;
+        *xp_cost = 0;
+        return;
+    }
+    let per = match tome {
+        TATTERED => 2,
+        BOUND => 3,
+        _ => 5,
+    };
+    let mut book = ItemStack::new("minecraft:enchanted_book", 1);
+    book.set_crafting_enchantments(taken.clone());
+    *output = Some(book);
+    *xp_cost = (taken.len() as i32 * per).clamp(1, 39);
+    *material_cost = 1;
+}
+
+/// `anvil_craft_post`: a siphon tome's item comes back to the player without its enchantments and a quarter of its
+/// durability worn off (never broken); what doesn't fit drops on the anvil.
+pub(in crate::game) fn anvil_taken(game: &mut Game<'_>, player: u128, pos: [i32; 3], craft: &horizon_client::menu::AnvilCraft) {
+    let (Some(left), Some(right)) = (craft.left.as_ref(), craft.right.as_ref()) else { return };
+    if right.item.as_ref() != SIPHON || left.enchantments().is_empty() {
+        return;
+    }
+    let mut back = left.clone();
+    back.count = 1;
+    back.data_mut().enchantments.clear();
+    back.tidy();
+    let max = game.items().get(&back.item).map_or(0, |i| i.max_damage);
+    if max > 0 {
+        back.damage = (back.damage + max / 4).min(max - 1);
+    }
+    if let Some(rest) = game.native_give_stack(player, back) {
+        let dimension = game.dim.id().to_owned();
+        let item = horizon_items::item_nbt::item_to_nbt(&rest);
+        let nbt: Compound = [("Item", item), ("PickupDelay", Tag::Short(10))].into_iter().map(|(k, v)| (k.into(), v)).collect();
+        let at = [f64::from(pos[0]) + 0.5, f64::from(pos[1]) + 1.1, f64::from(pos[2]) + 0.5];
+        if game.native_summon(&dimension, "minecraft:item", at, nbt).is_none() {
+            log::warn!("Vast Enchanting: a siphoned item couldn't be dropped: {}", rest.item);
+        }
     }
 }

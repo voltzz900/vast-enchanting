@@ -48,15 +48,34 @@ VANILLA_STATS = [
     ("minecraft:chiseled_bookshelf", (30, 2, 0, 0, 0)),
 ]
 # Infusions at the table: the item in its slot becomes the result when the table's stats are in range.
-# input, result, minimums (power, chaos, rarity), maximums (-1: none)
+# input, result, minimums (power, chaos, rarity), maximums (-1: none), how many
 INFUSIONS = [
-    ("vastenchanting:ember_shelf", "vastenchanting:infused_ember_shelf", (45, 30, 0), (-1, -1, -1)),
-    ("vastenchanting:tide_shelf", "vastenchanting:infused_tide_shelf", (45, 15, 10), (-1, -1, -1)),
-    ("vastenchanting:dormant_abyss_shelf", "vastenchanting:abyss_shelf", (60, 40, 40), (-1, -1, -1)),
-    ("vastenchanting:sight_shelf", "vastenchanting:sight_shelf_ii", (60, 20, 30), (-1, -1, -1)),
-    ("minecraft:carrot", "minecraft:golden_carrot", (20, 10, 0), (20, 30, -1)),
-    ("minecraft:amethyst_block", "minecraft:budding_amethyst", (60, 30, 50), (-1, 50, -1)),
+    ("vastenchanting:ember_shelf", "vastenchanting:infused_ember_shelf", (45, 30, 0), (-1, -1, -1), 1),
+    ("vastenchanting:tide_shelf", "vastenchanting:infused_tide_shelf", (45, 15, 10), (-1, -1, -1), 1),
+    ("vastenchanting:dormant_abyss_shelf", "vastenchanting:abyss_shelf", (60, 40, 40), (-1, -1, -1), 1),
+    ("vastenchanting:sight_shelf", "vastenchanting:sight_shelf_ii", (60, 20, 30), (-1, -1, -1), 1),
+    ("minecraft:carrot", "minecraft:golden_carrot", (20, 10, 0), (20, 30, -1), 1),
+    ("minecraft:amethyst_block", "minecraft:budding_amethyst", (60, 30, 50), (-1, 50, -1), 1),
+    ("vastenchanting:tattered_tome", "vastenchanting:bound_tome", (40, 20, 30), (-1, 50, -1), 2),
+    ("vastenchanting:bound_tome", "vastenchanting:siphon_tome", (55, 25, 45), (-1, 70, -1), 2),
 ]
+
+# ---- the tomes ------------------------------------------------------------------------------------------------------
+# Used at an anvil with an enchanted item on the left: they take its enchantments into an enchanted book.
+# id, english, portuguese, cover, trim
+TOMES = [
+    ("tattered_tome", "Tattered Tome", "Tomo Esfarrapado", 0x7A4A2A, 0xC8A27A),
+    ("bound_tome", "Bound Tome", "Tomo Encadernado", 0x1E3A7A, 0xF0B33A),
+    ("siphon_tome", "Siphon Tome", "Tomo de Sifão", 0x4A1E6A, 0x3AE0C0),
+]
+TOME_TIPS = {
+    "tattered_tome": ("At an anvil, with an enchanted item: about half its enchantments go into a book. The item is lost.",
+                      "Na bigorna, com um item encantado: cerca de metade dos encantamentos vai para um livro. O item se perde."),
+    "bound_tome": ("At an anvil, with an enchanted item: all its enchantments go into a book. The item is lost.",
+                   "Na bigorna, com um item encantado: todos os encantamentos vão para um livro. O item se perde."),
+    "siphon_tome": ("At an anvil, with an enchanted item: all its enchantments go into a book, and the item comes back plain and worn.",
+                    "Na bigorna, com um item encantado: todos os encantamentos vão para um livro, e o item volta sem encanto e gasto."),
+}
 
 VAST_DEPTHS = {"stellarite_shelf": "stellarite", "infernium_shelf": "infernium", "voidium_shelf": "voidium"}
 
@@ -212,6 +231,56 @@ def table_textures():
                 c = (0x6A, 0x1E, 0x8A) if (x + y) % 5 else (0xF0, 0xB3, 0x3A)
             book[y][x] = (*c, 255)
     return top, side, bottom, book
+
+
+def tome_texture(name, cover, trim):
+    """A closed book seen from the front: spine on the left, page edges on the right and below."""
+    cover, trim = rgb(cover), rgb(trim)
+    page, page_dark = (0xEE, 0xE6, 0xCC), (0xB8, 0xAC, 0x8E)
+    img = [[CLEAR] * 16 for _ in range(16)]
+
+    def put(x, y, c):
+        if 0 <= x < 16 and 0 <= y < 16:
+            img[y][x] = (*c, 255)
+
+    for y in range(2, 14):  # pages behind the cover, showing right and below
+        for x in range(5, 14):
+            put(x, y + 1, page if (y + x) % 2 else page_dark)
+    rnd = random.Random(len(name))
+    for y in range(2, 14):
+        for x in range(3, 13):
+            c = shade(cover, rnd.uniform(0.9, 1.1))
+            if x in (3, 4):  # the spine
+                c = shade(cover, 0.6 if x == 3 else 0.75)
+            if y in (2, 13) or x == 12:
+                c = shade(cover, 0.7)
+            put(x, y, c)
+    if name == "tattered_tome":
+        for x, y in ((12, 4), (12, 5), (11, 5), (12, 9), (12, 10), (11, 10), (12, 11), (8, 13), (9, 13)):
+            img[y][x] = CLEAR  # torn bites
+        for x, y in ((6, 4), (7, 5), (8, 6), (9, 7), (7, 9), (6, 10)):
+            put(x, y, shade(trim, 0.9))  # scuffs and a stitch
+        for y in range(4, 12, 2):
+            put(4, y, trim)
+    elif name == "bound_tome":
+        for y in range(2, 14):
+            put(8, y, trim)  # a gold strap
+        for x, y in ((5, 3), (6, 3), (5, 4), (11, 3), (10, 3), (11, 4), (5, 12), (6, 12), (5, 11), (11, 12), (10, 12), (11, 11)):
+            put(x, y, trim)  # corners
+        put(8, 7, (255, 255, 255)); put(8, 8, shade(trim, 0.7))
+        put(13, 7, trim); put(13, 8, shade(trim, 0.7))  # the clasp
+    else:  # siphon: a spiral drawing inward
+        cx, cy = 8.0, 7.5
+        for i in range(40):
+            a = i * 0.5
+            r = 3.9 - i * 0.12
+            if r < 0.6:
+                break
+            put(round(cx + r * math.cos(a)), round(cy + r * math.sin(a)), mix(shade(trim, 0.7), (255, 255, 255), i / 32))
+        put(8, 8, (255, 255, 255))
+        for y in range(3, 13, 3):
+            put(4, y, trim)
+    return img
 
 
 def gui_texture():
@@ -417,6 +486,22 @@ def build(out):
                                              "V": f"{NS}:void_shelf"},
                [{"type": "neoforge:mod_loaded", "modid": "vastdepths"}])
 
+    # The tomes.
+    for name, en, pt, cover, trim in TOMES:
+        files[f"assets/{NS}/textures/item/{name}.png"] = png(tome_texture(name, cover, trim))
+        files[f"assets/{NS}/models/item/{name}.json"] = {"parent": "minecraft:item/generated",
+                                                          "textures": {"layer0": f"{NS}:item/{name}"}}
+        files[f"assets/{NS}/items/{name}.json"] = {"model": {"type": "minecraft:model", "model": f"{NS}:item/{name}"}}
+        files[f"data/{NS}/horizon/item/{name}.json"] = {"template": "minecraft:paper"}
+        lang_en[f"item.{NS}.{name}"], lang_pt[f"item.{NS}.{name}"] = en, pt
+        lang_en[f"item.{NS}.{name}.desc"], lang_pt[f"item.{NS}.{name}.desc"] = TOME_TIPS[name]
+        tags.setdefault(("item", f"{NS}:tomes"), []).append(f"{NS}:{name}")
+        items.append(f"{NS}:{name}")
+    files[f"data/{NS}/recipe/tattered_tome.json"] = {
+        "type": "minecraft:crafting_shaped", "category": "misc",
+        "key": {"S": "minecraft:string", "B": "minecraft:book", "I": "minecraft:iron_ingot"},
+        "pattern": [" S ", "BIB", " S "], "result": {"id": f"{NS}:tattered_tome", "count": 2}}
+
     files[f"assets/{NS}/textures/gui/table.png"] = png(gui_texture())
     for (registry, tname), values in tags.items():
         tns, path = tname.split(":")
@@ -440,7 +525,7 @@ def build(out):
         'description = "The Vast Enchanting Table and its shelves: blocks, art, recipes and names. Needs the native mod."\n'
         'authors = ["voltzz900"]\napi = "0.2"\nside = "both"\ncapabilities = ["registries"]\n')
     write_rust()
-    print(f"{NS}: {len(items)} blocks, {len(files) + 1} files")
+    print(f"{NS}: {len(items)} blocks and items, {len(files) + 1} files")
 
 
 def write_rust():
@@ -449,11 +534,11 @@ def write_rust():
              "pub const STATS: &[(&str, f32, f32, f32, f32, i32)] = &["]
     for name, (mx, e, q, a, c) in [(f"{NS}:{n}", s) for n, _, _, _, s in SHELVES] + VANILLA_STATS:
         lines.append(f'    ("{name}", {float(mx)}, {float(e)}, {float(q)}, {float(a)}, {c}),')
-    lines += ["];", "/// (input, result, minimum power, chaos, rarity, maximum power, chaos, rarity; -1 for none).",
-              "pub const INFUSIONS: &[(&str, &str, [f32; 3], [f32; 3])] = &["]
-    for inp, res, mn, mx in INFUSIONS:
+    lines += ["];", "/// (input, result, minimum power, chaos, rarity, maximum power, chaos, rarity (-1 for none), how many).",
+              "pub const INFUSIONS: &[(&str, &str, [f32; 3], [f32; 3], u32)] = &["]
+    for inp, res, mn, mx, n in INFUSIONS:
         lines.append(f'    ("{inp}", "{res}", [{", ".join(str(float(v)) for v in mn)}], '
-                     f'[{", ".join(str(float(v)) for v in mx)}]),')
+                     f'[{", ".join(str(float(v)) for v in mx)}], {n}),')
     lines.append("];")
     path = ROOT / "mixins/vastenchanting_native/client.rs"
     text = path.read_text()
