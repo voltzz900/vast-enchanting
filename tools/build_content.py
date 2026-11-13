@@ -530,8 +530,9 @@ def build(out):
     def loot_self(name):
         files[f"data/{NS}/loot_table/blocks/{name}.json"] = {
             "type": "minecraft:block", "random_sequence": f"{NS}:blocks/{name}",
-            "pools": [{"bonus_rolls": 0.0, "rolls": 1.0, "entries": [{"type": "minecraft:item", "name": f"{NS}:{name}"}],
-                       "conditions": [{"condition": "minecraft:survives_explosion"}]}]}
+            "pools": [{"rolls": 1, "entries": [{"type": "minecraft:item", "name": f"{NS}:{name}"}],
+                       # 26.3's form: one `condition` object with a `type` (the 1.21 `conditions` list reads as none).
+                       "condition": {"type": "minecraft:survives_explosion"}}]}
 
     # The table.
     table = "vast_enchanting_table"

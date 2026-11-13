@@ -196,7 +196,7 @@ bindings = [
   { name = "craft", ty = "&horizon_client::menu::AnvilCraft", value = "craft" },
 ]
 
-# Our blocks drop themselves; a broken archive's item carries the enchantments it holds.
+# A broken archive's item carries the enchantments it holds.
 [[injection]]
 id = "archive-drops"
 kind = "HEAD"
@@ -206,7 +206,6 @@ bindings = [
   { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
   { name = "pos", ty = "[i32; 3]", value = "pos" },
   { name = "state", ty = "BlockStateId", value = "state" },
-  { name = "explosion", ty = "Option<f32>", value = "explosion" },
   { name = "drops", ty = "&mut Vec<ItemStack>", value = "&mut *drops" },
 ]
 

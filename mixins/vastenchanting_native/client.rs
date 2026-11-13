@@ -1100,16 +1100,8 @@ fn archive_extract(game: &mut Game<'_>, entity: &mut ModBlockEntity, id: i32) {
     entity.data = archive_data(e, &entity.nbt);
 }
 
-/// `native_block_drops`: our blocks drop themselves, and a broken archive's item carries what it holds.
-pub(in crate::game) fn block_drops(game: &mut Game<'_>, pos: [i32; 3], block: &str, explosion: bool, drops: &mut Vec<ItemStack>) {
-    if !block.starts_with("vastenchanting:") {
-        return;
-    }
-    // Their loot tables (each drops the block) roll nothing on this Horizon build: give the block ourselves when the
-    // loot left it out.
-    if !explosion && !drops.iter().any(|s| s.item.as_ref() == block) && game.items().get(block).is_some() {
-        drops.push(ItemStack::new(block, 1));
-    }
+/// `native_block_drops`: a broken archive's item carries what it holds.
+pub(in crate::game) fn block_drops(game: &mut Game<'_>, pos: [i32; 3], block: &str, drops: &mut Vec<ItemStack>) {
     if archive_cap(block).is_none() {
         return;
     }
