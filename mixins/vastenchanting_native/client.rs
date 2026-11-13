@@ -34,6 +34,8 @@ pub const STATS: &[(&str, f32, f32, f32, f32, i32)] = &[
     ("vastenchanting:draconic_void_shelf", 100.0, 20.0, 0.0, 0.0, 0),
     ("vastenchanting:sight_shelf", 0.0, 0.0, 0.0, 0.0, 1),
     ("vastenchanting:sight_shelf_ii", 0.0, 0.0, 0.0, 0.0, 2),
+    ("vastenchanting:relic_shelf", 0.0, 0.0, 0.0, 5.0, 0),
+    ("vastenchanting:veto_bookcase", 30.0, 1.0, 0.0, 0.0, 0),
     ("vastenchanting:stellarite_shelf", 100.0, 12.0, 5.0, 5.0, 0),
     ("vastenchanting:infernium_shelf", 100.0, 8.0, 15.0, 0.0, 0),
     ("vastenchanting:voidium_shelf", 100.0, 8.0, 0.0, 15.0, 0),
@@ -63,6 +65,8 @@ const D_INFUSE: usize = 7; // 1 + the infusion the top offer is, or 0
 const D_TOTAL: usize = 8; // 3: how many enchantments each offer gives
 const D_CLUE: usize = 11; // 3 x 6 x (1 + enchantment index, level)
 const MAX_CLUES: usize = 6;
+const D_TREASURE: usize = 47; // 1 when a relic shelf is read
+const D_BLOCKED: usize = 48; // how many enchantments veto shelves keep out
 pub const DATA_SLOTS: usize = 49;
 
 const ITEM: usize = 0;
@@ -129,6 +133,32 @@ pub struct Stats {
     pub chaos: f32,
     pub rarity: f32,
     pub clues: i32,
+    /// A relic shelf is read: treasure enchantments may be offered.
+    pub treasure: bool,
+    /// Enchantments veto shelves keep out, by index in the registry's list.
+    pub blocked: u64,
+}
+
+pub const RELIC_SHELF: &str = "vastenchanting:relic_shelf";
+/// Not "_shelf": Horizon gives a block with that ending the vanilla shelf's entity, not ours.
+pub const VETO_SHELF: &str = "vastenchanting:veto_bookcase";
+const VETO_SLOTS: usize = 5;
+
+/// The enchantments on the books a veto shelf holds, as bits by index in the registry's list.
+fn vetoed(game: &Game<'_>, at: [i32; 3]) -> u64 {
+    let Some(horizon_client::containers::BlockEntity::Mod(m)) = game.world.block_entities.get(&(at[0], at[1], at[2])) else {
+        return 0;
+    };
+    let e = game.enchantments();
+    let mut bits = 0u64;
+    for stack in m.items.iter().flatten() {
+        for (id, _) in stack.stored_enchantments().iter().chain(stack.enchantments()) {
+            if let Some(i) = e.list.iter().position(|d| d.id == *id).filter(|i| *i < 64) {
+                bits |= 1 << i;
+            }
+        }
+    }
+    bits
 }
 
 fn block_stats(block: &str) -> Option<(f32, f32, f32, f32, i32)> {
@@ -145,6 +175,7 @@ fn transmits(block: &str) -> bool {
 pub fn gather(game: &Game<'_>, pos: [i32; 3]) -> Stats {
     let mut ladder: Vec<(f32, f32)> = Vec::new();
     let (mut chaos, mut rarity, mut clues) = (15.0f32, 0.0f32, 1i32);
+    let (mut treasure, mut blocked) = (false, 0u64);
     for dy in 0..=1 {
         for dx in -2i32..=2 {
             for dz in -2i32..=2 {
@@ -157,6 +188,11 @@ pub fn gather(game: &Game<'_>, pos: [i32; 3]) -> Stats {
                 }
                 let block = game.native_block([pos[0] + dx, pos[1] + dy, pos[2] + dz]);
                 let Some((max, power, q, a, c)) = block_stats(&block) else { continue };
+                match block.as_str() {
+                    RELIC_SHELF => treasure = true,
+                    VETO_SHELF => blocked |= vetoed(game, [pos[0] + dx, pos[1] + dy, pos[2] + dz]),
+                    _ => {}
+                }
                 match ladder.iter_mut().find(|(m, _)| *m == max) {
                     Some(step) => step.1 += power,
                     None => ladder.push((max, power)),
@@ -177,6 +213,8 @@ pub fn gather(game: &Game<'_>, pos: [i32; 3]) -> Stats {
         chaos: chaos.clamp(0.0, 100.0),
         rarity: rarity.clamp(0.0, 100.0),
         clues: clues.max(0),
+        treasure,
+        blocked,
     }
 }
 
@@ -259,8 +297,12 @@ fn select(e: &Enchantments, items: &horizon_client::items::Items, rng: &mut Rng,
         let power = ((level as f32 * factor).round() as i32).clamp(1, 200);
         let weights = rarity_weights(stats.rarity);
         let mut possible: Vec<(Arc<str>, u32, i32)> = Vec::new();
-        for id in e.tag("minecraft:in_enchanting_table") {
-            let Some(def) = e.get(id) else { continue };
+        for (i, def) in e.list.iter().enumerate() {
+            let id = &def.id;
+            let offered = e.in_tag("minecraft:in_enchanting_table", id) || (stats.treasure && e.in_tag("minecraft:treasure", id));
+            if !offered || (i < 64 && stats.blocked & (1 << i) != 0) {
+                continue;
+            }
             if !is_book(item) && !e.is_primary(items, def, item) {
                 continue;
             }
@@ -395,7 +437,7 @@ pub fn offers(e: &Enchantments, items: &horizon_client::items::Items, seed: i32,
 }
 
 fn enchantment_index(e: &Enchantments, id: &str) -> i32 {
-    e.tag("minecraft:in_enchanting_table").iter().position(|x| &**x == id).map_or(0, |i| i as i32 + 1)
+    e.list.iter().position(|d| &*d.id == id).map_or(0, |i| i as i32 + 1)
 }
 
 fn write_data(e: &Enchantments, stats: Stats, offers: &Offers, data: &mut Vec<i32>) {
@@ -414,12 +456,14 @@ fn write_data(e: &Enchantments, stats: Stats, offers: &Offers, data: &mut Vec<i3
     data[D_RARITY] = (stats.rarity * 10.0).round() as i32;
     data[D_CLUES] = stats.clues;
     data[D_INFUSE] = offers.infusion.map_or(0, |i| i as i32 + 1);
+    data[D_TREASURE] = i32::from(stats.treasure);
+    data[D_BLOCKED] = stats.blocked.count_ones() as i32;
 }
 
 // ---- the block entity ---------------------------------------------------------------------------------------------
 
 pub fn block_entity(block: &str, entity: &mut Option<(String, Compound)>) {
-    if entity.is_none() && (block == TABLE || archive_cap(block).is_some()) {
+    if entity.is_none() && (block == TABLE || block == VETO_SHELF || archive_cap(block).is_some()) {
         *entity = Some((block.to_owned(), Compound::new()));
     }
 }
@@ -438,6 +482,14 @@ pub fn block_entity_container(block: &str, out: &mut Option<ModContainer>) {
             inputs: Vec::new(),
             outputs: Vec::new(),
             menu: Some(MENU.to_owned()),
+        });
+    } else if block == VETO_SHELF {
+        *out = Some(ModContainer {
+            slots: VETO_SLOTS,
+            faces: std::array::from_fn(|_| Vec::new()),
+            inputs: Vec::new(),
+            outputs: Vec::new(),
+            menu: Some("minecraft:hopper".to_owned()),
         });
     } else if archive_cap(block).is_some() {
         // Hoppers may feed books in from any side; nothing comes out by them.
@@ -561,6 +613,8 @@ pub(in crate::game) fn menu_button(game: &mut Game<'_>, pos: [i32; 3], entity: &
 const GUI: &str = "vastenchanting:gui/table";
 const OFFER: [f32; 4] = [60.0, 14.0, 108.0, 19.0];
 const BARS_X: f32 = 52.0;
+/// Where the special shelves' marks go: the free corner above the item and lapis slots.
+const MARKS: [f32; 4] = [12.0, 24.0, 42.0, 12.0];
 const BAR_W: f32 = 92.0;
 
 pub fn screen(block: &str, out: &mut Option<super::native_hooks::NativeScreen>) {
@@ -593,8 +647,8 @@ fn clue(e: &Enchantments, data: &[i32], slot: usize, k: usize) -> Option<(String
     if index <= 0 {
         return None;
     }
-    let id = e.tag("minecraft:in_enchanting_table").get(index as usize - 1)?;
-    Some(e.full_name(id, level.max(1) as u32))
+    let def = e.list.get(index as usize - 1)?;
+    Some(e.full_name(&def.id, level.max(1) as u32))
 }
 
 fn fit(game: &Game<'_>, text: &str, width: f32) -> String {
@@ -682,6 +736,15 @@ pub(in crate::game) fn screen_draw(game: &Game<'_>, block: &str, data: &[i32], b
     let clues = lang("vastenchanting.clues", "Clues: %s").replacen("%s", &data[D_CLUES].to_string(), 1);
     let cw = game.native_text_width(&clues);
     game.native_text(batch, &clues, [ox + 168.0 - cw, oy + 5.0], 0x404040, false);
+    // Marks for the special shelves, above the slots: a gold star for treasure, a red count for vetoes.
+    let mut x = ox + MARKS[0] + 2.0;
+    if data[D_TREASURE] > 0 {
+        game.native_text(batch, "✦", [x, oy + MARKS[1] + 2.0], 0xC88A00, false);
+        x += game.native_text_width("✦") + 4.0;
+    }
+    if data[D_BLOCKED] > 0 {
+        game.native_text(batch, &format!("×{}", data[D_BLOCKED]), [x, oy + MARKS[1] + 2.0], 0xB02020, false);
+    }
 }
 
 pub fn screen_click(block: &str, data: &[i32], at: [f32; 2], right: bool, button: &mut Option<i32>) {
@@ -741,6 +804,17 @@ pub(in crate::game) fn screen_tooltip(game: &Game<'_>, block: &str, data: &[i32]
         lines.push(format!("{colour}{}", lang("vastenchanting.levels", "%s levels, %s lapis").replacen("%s", &cost.to_string(), 1).replacen("%s", &(i + 1).to_string(), 1)));
         return;
     }
+    if inside([96.0, 3.0, 76.0, 11.0], at) || (inside(MARKS, at) && (data[D_TREASURE] > 0 || data[D_BLOCKED] > 0)) {
+        lines.push(format!("§f{}", lang("vastenchanting.clues", "Clues: %s").replacen("%s", &data[D_CLUES].to_string(), 1)));
+        lines.push(format!("§7{}", lang("vastenchanting.clues.desc", "How many of each offer's enchantments are shown before you choose.")));
+        if data[D_TREASURE] > 0 {
+            lines.push(format!("§6{}", lang("vastenchanting.treasure", "Treasure enchantments offered (a relic shelf)")));
+        }
+        if data[D_BLOCKED] > 0 {
+            lines.push(format!("§c{}", lang("vastenchanting.blocked", "%s enchantments kept out (veto shelves)").replacen("%s", &data[D_BLOCKED].to_string(), 1)));
+        }
+        return;
+    }
     let rows = [("vastenchanting.power", "Power", "How strong the offers get: the top offer costs this many levels."),
                 ("vastenchanting.chaos", "Chaos", "How much each offer's strength varies, up or down."),
                 ("vastenchanting.rarity", "Rarity", "Favours rare enchantments; at 25 and 75 an offer gains another.")];
@@ -768,6 +842,10 @@ pub fn tooltip(stack: &ItemStack, lines: &mut Vec<(horizon_client::text::Text, u
     let Some((max, power, chaos, rarity, clues)) = block_stats(&stack.item) else { return };
     if !stack.item.starts_with("vastenchanting:") {
         return;
+    }
+    if matches!(stack.item.as_ref(), RELIC_SHELF | VETO_SHELF) {
+        let key = format!("block.{}.desc", stack.item.replacen(':', ".", 1));
+        lines.push((Text::legacy(&format!("§6{}", lang(&key, ""))), u32::MAX));
     }
     if power != 0.0 || chaos != 0.0 || rarity != 0.0 {
         let line = lang("vastenchanting.shelf.stats", "Power +%s (up to %s) · Chaos %s · Rarity %s")

@@ -37,6 +37,10 @@ SHELVES = [
     ("draconic_void_shelf", "Draconic Void Shelf", "Estante do Vazio Dracônica", "void_draconic", (100, 20, 0, 0, 0)),
     ("sight_shelf", "Shelf of Sight", "Estante da Visão", "sight", (0, 0, 0, 0, 1)),
     ("sight_shelf_ii", "Shelf of Sight II", "Estante da Visão II", "sight_ii", (0, 0, 0, 0, 2)),
+    # Special ones: a relic shelf lets the table offer treasure enchantments; a veto shelf holds books whose
+    # enchantments the table won't offer.
+    ("relic_shelf", "Relic Shelf", "Estante de Relíquias", "relic", (0, 0, 0, 5, 0)),
+    ("veto_bookcase", "Veto Shelf", "Estante do Veto", "veto", (30, 1, 0, 0, 0)),
     # Vast Depths' metals: the top of the climb (their recipes need Vast Depths).
     ("stellarite_shelf", "Stellarite Shelf", "Estante de Estelarita", "stellarite", (100, 12, 5, 5, 0)),
     ("infernium_shelf", "Infernium Shelf", "Estante de Infernium", "infernium", (100, 8, 15, 0, 0)),
@@ -131,6 +135,17 @@ FAMILIES = {
     "stellarite": dict(frame=0x6A4A12, stone=0xF0B33A, books=[0xF0B33A, 0xFFE08A, 0xB07A1E, 0xFFFFFF], glow=0xFFD27A),
     "infernium": dict(frame=0x5A1E0E, stone=0xE0562A, books=[0xE0562A, 0xFF9A5A, 0x8A2A0E, 0xFFD27A], glow=0xFF7A3A),
     "voidium": dict(frame=0x3A1250, stone=0xC23CE6, books=[0xC23CE6, 0xE69AFF, 0x6A1E8A, 0xFFFFFF], glow=0xE07AFF),
+    "relic": dict(frame=0x3A2A12, stone=0xB08A3A, books=[0xF0B33A, 0x2AB06A, 0xB0262A, 0xFFE59A], glow=0x7AF0A0),
+    "veto": dict(frame=0x262426, stone=0x6A1E1E, books=[0x8A1E1E, 0x4A4A4A, 0xB03A2A, 0x2A2A2A], glow=None),
+}
+# Shelves with a block entity (the veto shelf holds books).
+# Its id must not end in "_shelf": Horizon gives any such block the vanilla shelf's own entity.
+SHELF_ENTITIES = {"veto_bookcase"}
+SHELF_TIPS = {
+    "relic_shelf": ("A table that reads it also offers treasure enchantments.",
+                    "Uma mesa que a lê também oferece encantamentos de tesouro."),
+    "veto_bookcase": ("Holds up to five enchanted books: a table that reads it won't offer their enchantments.",
+                   "Guarda até cinco livros encantados: uma mesa que a lê não oferece os encantamentos deles."),
 }
 
 
@@ -486,6 +501,8 @@ def build(out):
                "vastenchanting.chaos.desc": "How much each offer's strength varies, up or down.",
                "vastenchanting.rarity.desc": "Favours rare enchantments; at 25 and 75 an offer gains another.",
                "vastenchanting.clues.desc": "How many of each offer's enchantments are shown before you choose.",
+               "vastenchanting.treasure": "Treasure enchantments offered (a relic shelf)",
+               "vastenchanting.blocked": "%s enchantments kept out (veto shelves)",
                "vastenchanting.more": "...and %s more",
                "vastenchanting.unknown": "Unknown enchantments",
                "vastenchanting.infuse": "Infuse into %s",
@@ -500,6 +517,8 @@ def build(out):
                "vastenchanting.chaos.desc": "O quanto a força de cada oferta varia, pra cima ou pra baixo.",
                "vastenchanting.rarity.desc": "Favorece encantamentos raros; em 25 e 75 cada oferta ganha mais um.",
                "vastenchanting.clues.desc": "Quantos encantamentos de cada oferta aparecem antes de escolher.",
+               "vastenchanting.treasure": "Encantamentos de tesouro nas ofertas (estante de relíquias)",
+               "vastenchanting.blocked": "%s encantamentos bloqueados (estantes do veto)",
                "vastenchanting.more": "...e mais %s",
                "vastenchanting.unknown": "Encantamentos desconhecidos",
                "vastenchanting.infuse": "Infundir em %s",
@@ -561,7 +580,7 @@ def build(out):
     # The shelves.
     for i, (name, en, pt, family, _stats) in enumerate(SHELVES):
         files[f"data/{NS}/horizon/block/{name}.json"] = {
-            "template": "minecraft:bookshelf", "item": True,
+            "template": "minecraft:beacon" if name in SHELF_ENTITIES else "minecraft:bookshelf", "item": True,
             "properties": {"hardness": 2.0 if "abyss" not in family else 4.0, "explosion_resistance": 6.0,
                            "sounds": "minecraft:bookshelf",
                            **({"light": 7} if FAMILIES[family]["glow"] else {})}}
@@ -574,6 +593,8 @@ def build(out):
         files[f"assets/{NS}/items/{name}.json"] = {"model": {"type": "minecraft:model", "model": f"{NS}:block/{name}"}}
         loot_self(name)
         lang_en[f"block.{NS}.{name}"], lang_pt[f"block.{NS}.{name}"] = en, pt
+        if name in SHELF_TIPS:
+            lang_en[f"block.{NS}.{name}.desc"], lang_pt[f"block.{NS}.{name}.desc"] = SHELF_TIPS[name]
         tags.setdefault(("block", "minecraft:mineable/axe" if "abyss" not in family else "minecraft:mineable/pickaxe"),
                         []).append(f"{NS}:{name}")
         tags.setdefault(("item", f"{NS}:shelves"), []).append(f"{NS}:{name}")
@@ -605,6 +626,10 @@ def build(out):
     shaped("sight_shelf", ["GAG", "SOY", "GAG"], {"G": "minecraft:gold_block", "A": "minecraft:amethyst_shard",
                                                     "S": "minecraft:spyglass", "O": "minecraft:bookshelf",
                                                     "Y": "minecraft:ender_eye"})
+    shaped("relic_shelf", ["GDG", "EOE", "GDG"], {"G": "minecraft:gold_ingot", "D": "minecraft:diamond",
+                                                    "E": "minecraft:emerald", "O": "minecraft:bookshelf"})
+    shaped("veto_bookcase", ["SIS", "ROR", "SIS"], {"S": "minecraft:stone_bricks", "I": "minecraft:iron_bars",
+                                                   "R": "minecraft:redstone", "O": "minecraft:bookshelf"})
     for name, metal in VAST_DEPTHS.items():
         shaped(name, ["IBI", "BVB", "IBI"], {"I": f"vastdepths:{metal}_ingot", "B": "minecraft:bookshelf",
                                              "V": f"{NS}:void_shelf"},
