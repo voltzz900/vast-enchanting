@@ -195,3 +195,30 @@ bindings = [
   { name = "pos", ty = "[i32; 3]", value = "pos" },
   { name = "craft", ty = "&horizon_client::menu::AnvilCraft", value = "craft" },
 ]
+
+# Our blocks drop themselves; a broken archive's item carries the enchantments it holds.
+[[injection]]
+id = "archive-drops"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_block_drops"
+helper = "h_drops.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "pos", ty = "[i32; 3]", value = "pos" },
+  { name = "state", ty = "BlockStateId", value = "state" },
+  { name = "explosion", ty = "Option<f32>", value = "explosion" },
+  { name = "drops", ty = "&mut Vec<ItemStack>", value = "&mut *drops" },
+]
+
+# The wheel scrolls the archive's list.
+[[injection]]
+id = "archive-wheel"
+hook = "screen_mouse_scrolled_pre"
+hook_version = 1
+kind = "HEAD"
+helper = "h_wheel.rs"
+bindings = [
+  { name = "screen", ty = "&crate::game::native_hooks::NativeScreenView<'_>", value = "screen" },
+  { name = "scroll", ty = "[f64; 2]", value = "scroll" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" },
+]

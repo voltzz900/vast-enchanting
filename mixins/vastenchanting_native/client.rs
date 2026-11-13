@@ -419,13 +419,13 @@ fn write_data(e: &Enchantments, stats: Stats, offers: &Offers, data: &mut Vec<i3
 // ---- the block entity ---------------------------------------------------------------------------------------------
 
 pub fn block_entity(block: &str, entity: &mut Option<(String, Compound)>) {
-    if entity.is_none() && block == TABLE {
+    if entity.is_none() && (block == TABLE || archive_cap(block).is_some()) {
         *entity = Some((block.to_owned(), Compound::new()));
     }
 }
 
 pub fn block_entity_ticks(block: &str, ticks: &mut bool) {
-    if block == TABLE {
+    if block == TABLE || archive_cap(block).is_some() {
         *ticks = true;
     }
 }
@@ -438,6 +438,15 @@ pub fn block_entity_container(block: &str, out: &mut Option<ModContainer>) {
             inputs: Vec::new(),
             outputs: Vec::new(),
             menu: Some(MENU.to_owned()),
+        });
+    } else if archive_cap(block).is_some() {
+        // Hoppers may feed books in from any side; nothing comes out by them.
+        *out = Some(ModContainer {
+            slots: 2,
+            faces: std::array::from_fn(|_| vec![BOOK_IN]),
+            inputs: vec![BOOK_IN],
+            outputs: Vec::new(),
+            menu: Some(ARCHIVE_MENU.to_owned()),
         });
     }
 }
@@ -454,6 +463,10 @@ fn seed_of(entity: &mut ModBlockEntity, pos: [i32; 3]) -> i32 {
 
 /// Every few ticks: the stats around the table and the offers for what lies on it, into the menu's data slots.
 pub(in crate::game) fn block_entity_tick(game: &mut Game<'_>, pos: [i32; 3], entity: &mut ModBlockEntity) {
+    if archive_cap(&entity.id).is_some() {
+        archive_tick(game, pos, entity);
+        return;
+    }
     if entity.id != TABLE {
         return;
     }
@@ -494,6 +507,10 @@ thread_local! {
 /// An offer clicked (`clickMenuButton`): check the levels and the lapis, then enchant or infuse, charge, and
 /// draw a new seed.
 pub(in crate::game) fn menu_button(game: &mut Game<'_>, pos: [i32; 3], entity: &mut ModBlockEntity, id: i32) {
+    if archive_cap(&entity.id).is_some() {
+        archive_extract(game, entity, id);
+        return;
+    }
     if entity.id != TABLE || !(0..3).contains(&id) {
         return;
     }
@@ -557,6 +574,8 @@ pub fn screen(block: &str, out: &mut Option<super::native_hooks::NativeScreen>) 
             own_labels: true,
             own_background: true,
         });
+    } else if archive_cap(block).is_some() {
+        archive_screen(out);
     }
 }
 
@@ -603,6 +622,10 @@ fn infusion_name(game: &Game<'_>, i: usize) -> String {
 }
 
 pub(in crate::game) fn screen_draw(game: &Game<'_>, block: &str, data: &[i32], batch: &mut HudBatch, origin: [f32; 2]) {
+    if archive_cap(block).is_some() {
+        archive_draw(game, block, data, batch, origin);
+        return;
+    }
     if block != TABLE {
         return;
     }
@@ -662,6 +685,10 @@ pub(in crate::game) fn screen_draw(game: &Game<'_>, block: &str, data: &[i32], b
 }
 
 pub fn screen_click(block: &str, data: &[i32], at: [f32; 2], right: bool, button: &mut Option<i32>) {
+    if archive_cap(block).is_some() {
+        archive_click(data, at, right, button);
+        return;
+    }
     if block != TABLE || right || data.len() < DATA_SLOTS {
         return;
     }
@@ -673,6 +700,11 @@ pub fn screen_click(block: &str, data: &[i32], at: [f32; 2], right: bool, button
 }
 
 pub(in crate::game) fn screen_tooltip(game: &Game<'_>, block: &str, data: &[i32], at: [f32; 2], lines: &mut Vec<String>) {
+    if archive_cap(block).is_some() {
+        MOUSE.with_borrow_mut(|m| *m = at);
+        archive_tooltip(game, data, at, lines);
+        return;
+    }
     if block != TABLE {
         return;
     }
@@ -724,6 +756,10 @@ pub(in crate::game) fn screen_tooltip(game: &Game<'_>, block: &str, data: &[i32]
 /// Shelves' tooltips: what they give a table.
 pub fn tooltip(stack: &ItemStack, lines: &mut Vec<(horizon_client::text::Text, u32)>) {
     use horizon_client::text::Text;
+    if archive_cap(&stack.item).is_some() {
+        archive_item_tooltip(stack, lines);
+        return;
+    }
     if TOMES.contains(&stack.item.as_ref()) {
         let key = format!("item.{}.desc", stack.item.replacen(':', ".", 1));
         lines.push((Text::legacy(&format!("§7{}", lang(&key, ""))), u32::MAX));
@@ -822,5 +858,363 @@ pub(in crate::game) fn anvil_taken(game: &mut Game<'_>, player: u128, pos: [i32;
         if game.native_summon(&dimension, "minecraft:item", at, nbt).is_none() {
             log::warn!("Vast Enchanting: a siphoned item couldn't be dropped: {}", rest.item);
         }
+    }
+}
+
+// ---- the archive --------------------------------------------------------------------------------------------------
+//
+// Enchanted books put in are kept as points per enchantment (a level-L book is worth 2^(L-1), so two of a level make
+// one of the next), with the highest level ever put in; a click writes an enchantment back onto the book below, one
+// level more (left) or as high as the points allow (right). Its saved data goes with its item when it's broken.
+
+pub const ARCHIVE: &str = "vastenchanting:arcane_archive";
+pub const ARCHIVE_MENU: &str = "vastenchanting:archive";
+/// Enchantments the screen can show: three data slots each (points' low and high 15 bits, highest level).
+const ARCHIVE_CAP: usize = 64;
+pub const ARCHIVE_DATA: usize = ARCHIVE_CAP * 3;
+const BOOK_IN: usize = 0;
+const BOOK_OUT: usize = 1;
+const BLOCK_ENTITY_DATA: &str = "minecraft:block_entity_data";
+
+/// The highest level an archive keeps.
+fn archive_cap(block: &str) -> Option<u32> {
+    (block == ARCHIVE).then_some(16)
+}
+
+fn points_for(level: u32) -> i64 {
+    if level == 0 { 0 } else { 1i64 << (level.min(31) - 1) }
+}
+
+fn sub_compound<'a>(nbt: &'a Compound, key: &str) -> Option<&'a Compound> {
+    match nbt.get(&java(key)) {
+        Some(Tag::Compound(c)) => Some(c),
+        _ => None,
+    }
+}
+
+fn sub_compound_mut<'a>(nbt: &'a mut Compound, key: &str) -> &'a mut Compound {
+    let slot = nbt.entry(java(key)).or_insert_with(|| Tag::Compound(Compound::new()));
+    if !matches!(slot, Tag::Compound(_)) {
+        *slot = Tag::Compound(Compound::new());
+    }
+    match slot {
+        Tag::Compound(c) => c,
+        _ => unreachable!("just made a compound"),
+    }
+}
+
+/// An enchantment's stored points and highest level.
+fn stored(nbt: &Compound, id: &str) -> (i64, u32) {
+    let points = sub_compound(nbt, "points").map_or(0, |c| get_i(c, id, 0).max(0) as i64);
+    let level = sub_compound(nbt, "levels").map_or(0, |c| get_i(c, id, 0).max(0) as u32);
+    (points, level)
+}
+
+fn set_stored(nbt: &mut Compound, id: &str, points: i64, level: u32) {
+    if points <= 0 {
+        sub_compound_mut(nbt, "points").remove(&java(id));
+        sub_compound_mut(nbt, "levels").remove(&java(id));
+        return;
+    }
+    set_i(sub_compound_mut(nbt, "points"), id, points.min(i64::from(i32::MAX)) as i32);
+    set_i(sub_compound_mut(nbt, "levels"), id, level as i32);
+}
+
+/// The highest level the points pay for from a plain book, no higher than `level`.
+fn affordable(points: i64, level: u32) -> u32 {
+    (1..=level).rev().find(|l| points_for(*l) <= points).unwrap_or(0)
+}
+
+/// Takes the enchanted book in the top slot into the archive.
+fn archive_deposit(e: &Enchantments, cap: u32, entity: &mut ModBlockEntity) -> bool {
+    let Some(book) = entity.items.get(BOOK_IN).cloned().flatten() else { return false };
+    if book.item.as_ref() != "minecraft:enchanted_book" || book.stored_enchantments().is_empty() {
+        return false;
+    }
+    let max_points = points_for(cap);
+    for (id, level) in book.stored_enchantments() {
+        if e.get(id).is_none() {
+            continue;
+        }
+        let (points, top) = stored(&entity.nbt, id);
+        let points = (points + points_for(*level) * i64::from(book.count.max(1))).min(max_points);
+        set_stored(&mut entity.nbt, id, points, top.max(*level).min(cap));
+    }
+    entity.items[BOOK_IN] = None;
+    true
+}
+
+fn archive_data(e: &Enchantments, nbt: &Compound) -> Vec<i32> {
+    let mut data = vec![0; ARCHIVE_DATA];
+    for (i, ench) in e.list.iter().take(ARCHIVE_CAP).enumerate() {
+        let (points, level) = stored(nbt, &ench.id);
+        let points = points.clamp(0, (1 << 30) - 1);
+        data[i * 3] = (points & 0x7FFF) as i32;
+        data[i * 3 + 1] = (points >> 15) as i32;
+        data[i * 3 + 2] = level as i32;
+    }
+    data
+}
+
+/// What each loaded archive held at its last tick, by dimension and position: by the time a broken block's drops are
+/// rolled its entity is gone, so its item takes what was kept here.
+static ARCHIVES_SEEN: std::sync::Mutex<Vec<(String, [i32; 3], Compound)>> = std::sync::Mutex::new(Vec::new());
+
+fn remember_archive(dimension: &str, pos: [i32; 3], nbt: &Compound) {
+    let Ok(mut seen) = ARCHIVES_SEEN.lock() else { return };
+    match seen.iter_mut().find(|(d, p, _)| *p == pos && d == dimension) {
+        Some(entry) if entry.2 == *nbt => {}
+        Some(entry) => entry.2 = nbt.clone(),
+        None => seen.push((dimension.to_owned(), pos, nbt.clone())),
+    }
+}
+
+fn forget_archive(dimension: &str, pos: [i32; 3]) -> Option<Compound> {
+    let mut seen = ARCHIVES_SEEN.lock().ok()?;
+    let i = seen.iter().position(|(d, p, _)| *p == pos && d == dimension)?;
+    Some(seen.swap_remove(i).2)
+}
+
+fn archive_tick(game: &mut Game<'_>, pos: [i32; 3], entity: &mut ModBlockEntity) {
+    let Some(cap) = archive_cap(&entity.id) else { return };
+    let e = game.enchantments();
+    archive_deposit(e, cap, entity);
+    let data = archive_data(e, &entity.nbt);
+    if entity.data != data {
+        entity.data = data;
+    }
+    remember_archive(game.dim.id(), pos, &entity.nbt);
+}
+
+/// A row clicked: `id` is the enchantment's index times two, plus one for "as high as the points allow".
+fn archive_extract(game: &mut Game<'_>, entity: &mut ModBlockEntity, id: i32) {
+    if id < 0 {
+        return;
+    }
+    let e = game.enchantments();
+    let (index, max) = (id as usize / 2, id % 2 == 1);
+    let Some(ench) = e.list.get(index) else { return };
+    let ench_id = ench.id.clone();
+    let Some(book) = entity.items.get(BOOK_OUT).cloned().flatten() else { return };
+    let plain = is_book(&book.item);
+    if !plain && book.item.as_ref() != "minecraft:enchanted_book" {
+        return;
+    }
+    let on_book = book.stored_enchantments();
+    if on_book.iter().any(|(other, _)| **other != *ench_id && !e.compatible(&ench_id, other)) {
+        return;
+    }
+    let current = on_book.iter().find(|(other, _)| **other == *ench_id).map_or(0, |(_, l)| *l);
+    let (points, level) = stored(&entity.nbt, &ench_id);
+    let pay = |target: u32| points_for(target) - points_for(current);
+    let target = if max {
+        (current + 1..=level).rev().find(|t| pay(*t) <= points).unwrap_or(0)
+    } else {
+        current + 1
+    };
+    if target <= current || target > level || pay(target) > points {
+        return;
+    }
+    let mut out = if plain { book.transmute("minecraft:enchanted_book", 1) } else { book };
+    out.enchant(&ench_id, target);
+    entity.items[BOOK_OUT] = Some(out);
+    set_stored(&mut entity.nbt, &ench_id, points - pay(target), level);
+    entity.data = archive_data(e, &entity.nbt);
+}
+
+/// `native_block_drops`: our blocks drop themselves, and a broken archive's item carries what it holds.
+pub(in crate::game) fn block_drops(game: &mut Game<'_>, pos: [i32; 3], block: &str, explosion: bool, drops: &mut Vec<ItemStack>) {
+    if !block.starts_with("vastenchanting:") {
+        return;
+    }
+    // Their loot tables (each drops the block) roll nothing on this Horizon build: give the block ourselves when the
+    // loot left it out.
+    if !explosion && !drops.iter().any(|s| s.item.as_ref() == block) && game.items().get(block).is_some() {
+        drops.push(ItemStack::new(block, 1));
+    }
+    if archive_cap(block).is_none() {
+        return;
+    }
+    let dimension = game.dim.id().to_owned();
+    let kept = forget_archive(&dimension, pos);
+    let Some(nbt) = game.native_with_mod_block_entity(pos, |e| e.nbt.clone()).or(kept) else { return };
+    let mut data = Compound::new();
+    for key in ["points", "levels"] {
+        if let Some(c) = sub_compound(&nbt, key).filter(|c| !c.is_empty()) {
+            data.insert(java(key), Tag::Compound(c.clone()));
+        }
+    }
+    if data.is_empty() {
+        return;
+    }
+    data.insert(java("id"), Tag::String(java(block)));
+    if let Some(stack) = drops.iter_mut().find(|s| s.item.as_ref() == block) {
+        stack.data_mut().set_other(BLOCK_ENTITY_DATA, Some(Tag::Compound(data)));
+    }
+}
+
+// The archive's screen: two book slots on the left, the list on the right, a scrollbar beside it.
+const ARCHIVE_GUI: &str = "vastenchanting:gui/archive";
+const LIST: [f32; 4] = [32.0, 14.0, 128.0, 90.0];
+const ROW_H: f32 = 15.0;
+const ROWS: usize = 6;
+const TRACK: [f32; 4] = [163.0, 14.0, 8.0, 92.0];
+
+thread_local! {
+    /// The list's first row shown.
+    static SCROLL: RefCell<usize> = const { RefCell::new(0) };
+}
+
+/// The enchantments the archive holds, as (index in the registry, points, highest level).
+fn archive_rows(data: &[i32]) -> Vec<(usize, i64, u32)> {
+    (0..ARCHIVE_CAP)
+        .filter_map(|i| {
+            let points = i64::from(data[i * 3]) | i64::from(data[i * 3 + 1]) << 15;
+            (points > 0).then_some((i, points, data[i * 3 + 2].max(0) as u32))
+        })
+        .collect()
+}
+
+fn archive_scroll(rows: usize) -> usize {
+    SCROLL.with_borrow_mut(|s| {
+        *s = (*s).min(rows.saturating_sub(ROWS));
+        *s
+    })
+}
+
+fn row_rect(k: usize) -> [f32; 4] {
+    [LIST[0], LIST[1] + ROW_H * k as f32, LIST[2], ROW_H]
+}
+
+fn archive_screen(out: &mut Option<super::native_hooks::NativeScreen>) {
+    *out = Some(super::native_hooks::NativeScreen {
+        width: 176.0,
+        height: 194.0,
+        slots: vec![Some([8.0, 18.0]), Some([8.0, 80.0])],
+        inventory_y: 112.0,
+        inventory_x: 8.0,
+        own_labels: true,
+        own_background: true,
+    });
+}
+
+fn archive_draw(game: &Game<'_>, block: &str, data: &[i32], batch: &mut HudBatch, origin: [f32; 2]) {
+    let [ox, oy] = origin;
+    game.native_sprite(batch, ARCHIVE_GUI, [0.0, 0.0, 176.0, 194.0], [ox, oy, 176.0, 194.0]);
+    let (ns, path) = block.split_once(':').unwrap_or(("minecraft", block));
+    game.native_text(batch, &lang(&format!("block.{ns}.{path}"), "Arcane Archive"), [ox + 8.0, oy + 4.0], 0x404040, false);
+    if data.len() < ARCHIVE_DATA {
+        return;
+    }
+    let rows = archive_rows(data);
+    if rows.is_empty() {
+        return;
+    }
+    let first = archive_scroll(rows.len());
+    let mouse = MOUSE.with_borrow(|m| *m);
+    let e = game.enchantments();
+    for k in 0..ROWS {
+        let Some(&(index, points, level)) = rows.get(first + k) else { break };
+        let Some(ench) = e.list.get(index) else { continue };
+        let r = row_rect(k);
+        let can = affordable(points, level);
+        let v = if can == 0 { 225.0 } else if inside(r, mouse) { 210.0 } else { 195.0 };
+        game.native_sprite(batch, ARCHIVE_GUI, [0.0, v, 128.0, 15.0], [ox + r[0], oy + r[1], 128.0, 15.0]);
+        let (name, curse) = e.full_name(&ench.id, can.max(1));
+        let shown = points.to_string();
+        let sw = game.native_text_width(&shown);
+        game.native_text(batch, &shown, [ox + r[0] + r[2] - sw - 3.0, oy + r[1] + 4.0], 0xB8A8D8, true);
+        let tint = if curse { 0xFF7A7A } else if can == 0 { 0x9A90A8 } else { 0xE6DCF0 };
+        game.native_text(batch, &fit(game, &name, r[2] - sw - 10.0), [ox + r[0] + 3.0, oy + r[1] + 4.0], tint, true);
+    }
+    // The scrollbar's thumb.
+    if rows.len() > ROWS {
+        let span = TRACK[3] - 15.0;
+        let y = TRACK[1] + span * first as f32 / (rows.len() - ROWS) as f32;
+        game.native_sprite(batch, ARCHIVE_GUI, [240.0, 195.0, 8.0, 15.0], [ox + TRACK[0], oy + y, 8.0, 15.0]);
+    }
+}
+
+fn archive_click(data: &[i32], at: [f32; 2], right: bool, button: &mut Option<i32>) {
+    if data.len() < ARCHIVE_DATA {
+        return;
+    }
+    let rows = archive_rows(data);
+    if inside(TRACK, at) && rows.len() > ROWS {
+        // The track: jump the thumb to where it was clicked.
+        let t = ((at[1] - TRACK[1] - 7.5) / (TRACK[3] - 15.0)).clamp(0.0, 1.0);
+        SCROLL.with_borrow_mut(|s| *s = (t * (rows.len() - ROWS) as f32).round() as usize);
+        return;
+    }
+    let first = archive_scroll(rows.len());
+    for k in 0..ROWS {
+        if let Some(&(index, _, _)) = rows.get(first + k)
+            && inside(row_rect(k), at)
+        {
+            *button = Some(index as i32 * 2 + i32::from(right));
+        }
+    }
+}
+
+fn archive_tooltip(game: &Game<'_>, data: &[i32], at: [f32; 2], lines: &mut Vec<String>) {
+    if data.len() < ARCHIVE_DATA {
+        return;
+    }
+    let rows = archive_rows(data);
+    if rows.is_empty() {
+        if inside(LIST, at) {
+            lines.push(format!("§7{}", lang("vastenchanting.archive.empty", "Nothing stored yet: put an enchanted book in the top slot.")));
+        }
+        return;
+    }
+    let first = archive_scroll(rows.len());
+    let e = game.enchantments();
+    for k in 0..ROWS {
+        let Some(&(index, points, level)) = rows.get(first + k) else { break };
+        if !inside(row_rect(k), at) {
+            continue;
+        }
+        let Some(ench) = e.list.get(index) else { return };
+        let can = affordable(points, level);
+        let (name, curse) = e.full_name(&ench.id, can.max(1));
+        lines.push(format!("{}{name}", if curse { "§c" } else { "§f" }));
+        lines.push(format!("§7{}", lang("vastenchanting.archive.points", "%s points stored").replacen("%s", &points.to_string(), 1)));
+        let cap = archive_cap(ARCHIVE).unwrap_or(16);
+        lines.push(format!("§7{}", lang("vastenchanting.archive.max", "Up to level %s (this archive keeps up to %s)")
+            .replacen("%s", &level.to_string(), 1).replacen("%s", &cap.to_string(), 1)));
+        if can < level {
+            let next = can + 1;
+            lines.push(format!("§8{}", lang("vastenchanting.archive.cost", "Level %s costs %s points from a plain book")
+                .replacen("%s", &next.to_string(), 1).replacen("%s", &points_for(next).to_string(), 1)));
+        }
+        lines.push(format!("§d{}", lang("vastenchanting.archive.click", "Left click: one level more on the bottom book")));
+        lines.push(format!("§d{}", lang("vastenchanting.archive.click_max", "Right click: as high as the points allow")));
+        return;
+    }
+}
+
+/// `screen_mouse_scrolled_pre`: the wheel scrolls the archive's list.
+pub fn archive_wheel(menu: Option<&str>, scroll: [f64; 2], canceled: &mut bool) {
+    if menu != Some(ARCHIVE_MENU) || scroll[1] == 0.0 {
+        return;
+    }
+    SCROLL.with_borrow_mut(|s| {
+        *s = if scroll[1] > 0.0 { s.saturating_sub(1) } else { *s + 1 };
+    });
+    *canceled = true;
+}
+
+/// The archive item's tooltip: what it does and how much it holds.
+fn archive_item_tooltip(stack: &ItemStack, lines: &mut Vec<(horizon_client::text::Text, u32)>) {
+    use horizon_client::text::Text;
+    let key = format!("block.{}.desc", stack.item.replacen(':', ".", 1));
+    lines.push((Text::legacy(&format!("§7{}", lang(&key, ""))), u32::MAX));
+    let held = stack.data().and_then(|d| d.other(BLOCK_ENTITY_DATA)).and_then(|t| match t {
+        Tag::Compound(c) => sub_compound(c, "points").map(|p| p.len()),
+        _ => None,
+    });
+    if let Some(n) = held.filter(|n| *n > 0) {
+        let line = lang("vastenchanting.archive.holds", "Holds %s enchantments").replacen("%s", &n.to_string(), 1);
+        lines.push((Text::legacy(&format!("§d{line}")), u32::MAX));
     }
 }

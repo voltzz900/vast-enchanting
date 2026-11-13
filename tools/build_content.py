@@ -79,6 +79,13 @@ TOME_TIPS = {
 
 VAST_DEPTHS = {"stellarite_shelf": "stellarite", "infernium_shelf": "infernium", "voidium_shelf": "voidium"}
 
+# ---- the archive ----------------------------------------------------------------------------------------------------
+# Stores enchanted books as points (a level-L book is worth 2^(L-1)) and writes them back onto books.
+# id, english, portuguese, highest level it keeps
+ARCHIVES = [
+    ("arcane_archive", "Arcane Archive", "Arquivo Arcano", 16),
+]
+
 # ---- art ------------------------------------------------------------------------------------------------------------
 
 CLEAR = (0, 0, 0, 0)
@@ -350,6 +357,123 @@ def gui_texture():
     return px
 
 
+def archive_textures():
+    """The archive's side (two shelves of books behind a gold-trimmed frame, a band of runes between), top (a lapis
+    sigil in a ring) and bottom."""
+    frame, frame_dark = rgb(0x2E1C40), rgb(0x1A1026)
+    gold, lapis, glow = rgb(0xF0B33A), rgb(0x2A5ADC), rgb(0x5AF0E6)
+    books = [rgb(c) for c in (0x3A4ABA, 0x6A2A9A, 0x1E7A8A, 0x8A3A6A, 0x2A6ACA, 0x4A1E7A)]
+    rnd = random.Random(11)
+    side = [[CLEAR] * 16 for _ in range(16)]
+    for y in range(16):
+        for x in range(16):
+            c = shade(frame, rnd.uniform(0.85, 1.1))
+            if x in (0, 15) or y in (0, 15):
+                c = frame_dark
+            if (x, y) in ((0, 0), (15, 0), (0, 15), (15, 15), (1, 1), (14, 1), (1, 14), (14, 14)):
+                c = gold
+            side[y][x] = (*c, 255)
+    for top_row in (2, 10):  # two shelves of books, four pixels tall
+        x = 1
+        while x < 15:
+            w = rnd.choice((1, 2, 2))
+            book = rnd.choice(books)
+            h = rnd.choice((3, 4, 4))
+            for bx in range(x, min(15, x + w)):
+                for by in range(top_row + 4 - h, top_row + 4):
+                    c = shade(book, 1.15 if bx == x else 0.9)
+                    if by == top_row + 4 - h + 1 and w == 2:
+                        c = shade(gold, 0.85)  # a gilt band on the wider spines
+                    side[by][bx] = (*c, 255)
+            x += w
+        for bx in range(1, 15):
+            side[top_row + 4][bx] = (*shade(frame_dark, 1.2), 255)  # the shelf board
+    for x in range(1, 15):  # the rune band
+        side[7][x] = (*shade(glow, 0.55 + 0.45 * ((x * 5) % 3 == 0)), 255)
+        side[8][x] = (*shade(frame_dark, 1.1), 255)
+    top = [[(*shade(frame, rnd.uniform(0.85, 1.05)), 255) for _ in range(16)] for _ in range(16)]
+    c = 7.5
+    for y in range(16):
+        for x in range(16):
+            r = math.hypot(x - c, y - c)
+            if x in (0, 15) or y in (0, 15):
+                top[y][x] = (*gold, 255)
+            elif 5.6 <= r <= 6.6:
+                top[y][x] = (*shade(gold, 0.85), 255)
+            elif r <= 4.6:
+                a = math.atan2(y - c, x - c)
+                star = r <= 1.2 + 3.0 * abs(math.cos(2.5 * a)) ** 4
+                top[y][x] = (*(mix(glow, (255, 255, 255), 0.3) if star else shade(lapis, 0.7 + 0.1 * (r % 2))), 255)
+    bottom = [[(*shade(frame_dark, rnd.uniform(0.8, 1.15)), 255) for _ in range(16)] for _ in range(16)]
+    return side, top, bottom
+
+
+def archive_gui_texture():
+    """256x256: the archive's screen (176x194) at the top left; below it the list's rows (normal, hover, faint),
+    128x15 each, and the scrollbar's thumb (8x15) at x 240."""
+    W = 256
+    px = [[CLEAR] * W for _ in range(W)]
+    bg, light, darkc, black = (0xC6, 0xC6, 0xC6), (0xFF, 0xFF, 0xFF), (0x55, 0x55, 0x55), (0x00, 0x00, 0x00)
+
+    def rect(x0, y0, w, h, c):
+        for y in range(y0, y0 + h):
+            for x in range(x0, x0 + w):
+                px[y][x] = (*c, 255)
+
+    def bevel(x0, y0, w, h, fill, hi, lo):
+        rect(x0, y0, w, h, fill)
+        rect(x0, y0, w, 1, hi)
+        rect(x0, y0, 1, h, hi)
+        rect(x0, y0 + h - 1, w, 1, lo)
+        rect(x0 + w - 1, y0, 1, h, lo)
+
+    def slot(x0, y0):
+        rect(x0, y0, 18, 18, (0x8B, 0x8B, 0x8B))
+        rect(x0, y0, 17, 1, (0x37, 0x37, 0x37))
+        rect(x0, y0, 1, 17, (0x37, 0x37, 0x37))
+        rect(x0 + 1, y0 + 17, 17, 1, light)
+        rect(x0 + 17, y0 + 1, 1, 17, light)
+
+    w, h = 176, 194
+    rect(1, 1, w - 2, h - 2, bg)
+    rect(2, 0, w - 4, 1, black)
+    rect(2, h - 1, w - 4, 1, black)
+    rect(0, 2, 1, h - 4, black)
+    rect(w - 1, 2, 1, h - 4, black)
+    for (x, y) in ((1, 1), (w - 2, 1), (1, h - 2), (w - 2, h - 2)):
+        px[y][x] = (*black, 255)
+    rect(2, 1, w - 4, 2, light)
+    rect(1, 2, 2, h - 5, light)
+    rect(3, h - 3, w - 5, 2, darkc)
+    rect(w - 3, 3, 2, h - 5, darkc)
+    # The book going in (top) and the book coming out (bottom), an arrow from each toward the list and back.
+    slot(7, 17)
+    slot(7, 79)
+    arrow = (0x6A, 0x5A, 0x8A)
+    for i in range(4):  # in: pointing right, toward the list
+        rect(25 + i, 23 + i, 1, 7 - 2 * i, arrow)
+    for i in range(4):  # out: pointing left, from the list
+        rect(28 - i, 85 + i, 1, 7 - 2 * i, arrow)
+    # A stack of tiny books between the slots: what lies inside.
+    for k, col in enumerate(((0x3A, 0x4A, 0xBA), (0x6A, 0x2A, 0x9A), (0x1E, 0x7A, 0x8A))):
+        bevel(9, 44 + k * 8, 14, 7, col, shade(col, 1.4), shade(col, 0.6))
+        rect(11, 46 + k * 8, 10, 1, (0xF0, 0xB3, 0x3A))
+    # The list's well and the scrollbar's track.
+    bevel(31, 13, 130, 94, (0x3A, 0x2A, 0x4A), (0x22, 0x18, 0x2C), (0x6A, 0x5A, 0x7A))
+    bevel(162, 13, 10, 94, (0x2A, 0x22, 0x34), (0x1A, 0x14, 0x22), (0x5A, 0x4E, 0x66))
+    for r in range(3):
+        for c in range(9):
+            slot(7 + c * 18, 111 + r * 18)
+    for c in range(9):
+        slot(7 + c * 18, 169)
+    for i, (fill, hi, lo) in enumerate((((0x5A, 0x4A, 0x7A), (0x8A, 0x7A, 0xAA), (0x3A, 0x2A, 0x5A)),
+                                        ((0x8A, 0x6A, 0xC0), (0xC0, 0xA8, 0xF0), (0x4A, 0x2A, 0x7A)),
+                                        ((0x44, 0x3C, 0x50), (0x54, 0x4C, 0x60), (0x34, 0x30, 0x3A)))):
+        bevel(0, 195 + i * 15, 128, 15, fill, hi, lo)
+    bevel(240, 195, 8, 15, (0xC0, 0xA8, 0xF0), (0xF0, 0xE6, 0xFF), (0x6A, 0x4A, 0x9A))
+    return px
+
+
 # ---- the mod ----------------------------------------------------------------------------------------------------------
 
 
@@ -501,6 +625,55 @@ def build(out):
         "type": "minecraft:crafting_shaped", "category": "misc",
         "key": {"S": "minecraft:string", "B": "minecraft:book", "I": "minecraft:iron_ingot"},
         "pattern": [" S ", "BIB", " S "], "result": {"id": f"{NS}:tattered_tome", "count": 2}}
+
+    # The archive.
+    side, top, bottom = archive_textures()
+    for name, en, pt, cap in ARCHIVES:
+        files[f"data/{NS}/horizon/block/{name}.json"] = {
+            "template": "minecraft:beacon", "item": True,
+            # No tool needed: a hand breaking it must still drop it, with what it holds.
+            "properties": {"hardness": 3.0, "explosion_resistance": 1200.0, "light": 5, "requires_tool": False,
+                           "sounds": "minecraft:chiseled_bookshelf"}}
+        for n, p in (("side", side), ("top", top), ("bottom", bottom)):
+            files[f"assets/{NS}/textures/block/{name}_{n}.png"] = png(p)
+        files[f"assets/{NS}/models/block/{name}.json"] = {
+            "parent": "minecraft:block/cube_bottom_top",
+            "textures": {"side": f"{NS}:block/{name}_side", "top": f"{NS}:block/{name}_top",
+                         "bottom": f"{NS}:block/{name}_bottom"}}
+        files[f"assets/{NS}/blockstates/{name}.json"] = {"variants": {"": {"model": f"{NS}:block/{name}"}}}
+        files[f"assets/{NS}/items/{name}.json"] = {"model": {"type": "minecraft:model", "model": f"{NS}:block/{name}"}}
+        loot_self(name)
+        lang_en[f"block.{NS}.{name}"], lang_pt[f"block.{NS}.{name}"] = en, pt
+        lang_en[f"block.{NS}.{name}.desc"] = (f"Put enchanted books in: they're kept as points. Take enchantments back "
+                                              f"out onto books, up to level {cap}. Keeps them when broken.")
+        lang_pt[f"block.{NS}.{name}.desc"] = (f"Coloque livros encantados: eles viram pontos. Tire os encantamentos de "
+                                              f"volta em livros, até o nível {cap}. Guarda tudo ao ser quebrado.")
+        tags.setdefault(("block", "minecraft:mineable/axe"), []).append(f"{NS}:{name}")
+        items.append(f"{NS}:{name}")
+    files[f"data/{NS}/horizon/menu/archive.json"] = {"slots": 2, "data_slots": 192}
+    files[f"data/{NS}/recipe/arcane_archive.json"] = {
+        "type": "minecraft:crafting_shaped", "category": "misc",
+        "key": {"I": f"#{NS}:infused_shelves", "C": "minecraft:chiseled_bookshelf", "Y": "minecraft:ender_eye",
+                "T": f"{NS}:{table}", "L": "minecraft:lapis_block"},
+        "pattern": ["ICI", "YTY", "LLL"], "result": {"id": f"{NS}:arcane_archive"}}
+    tags[("item", f"{NS}:infused_shelves")] = [f"{NS}:infused_ember_shelf", f"{NS}:infused_tide_shelf"]
+    lang_en.update({
+        "vastenchanting.archive.empty": "Nothing stored yet: put an enchanted book in the top slot.",
+        "vastenchanting.archive.points": "%s points stored",
+        "vastenchanting.archive.max": "Up to level %s (this archive keeps up to %s)",
+        "vastenchanting.archive.cost": "Level %s costs %s points from a plain book",
+        "vastenchanting.archive.click": "Left click: one level more on the bottom book",
+        "vastenchanting.archive.click_max": "Right click: as high as the points allow",
+        "vastenchanting.archive.holds": "Holds %s enchantments"})
+    lang_pt.update({
+        "vastenchanting.archive.empty": "Nada guardado ainda: coloque um livro encantado no espaço de cima.",
+        "vastenchanting.archive.points": "%s pontos guardados",
+        "vastenchanting.archive.max": "Até o nível %s (este arquivo guarda até %s)",
+        "vastenchanting.archive.cost": "Nível %s custa %s pontos num livro comum",
+        "vastenchanting.archive.click": "Clique esquerdo: um nível a mais no livro de baixo",
+        "vastenchanting.archive.click_max": "Clique direito: o mais alto que os pontos permitem",
+        "vastenchanting.archive.holds": "Guarda %s encantamentos"})
+    files[f"assets/{NS}/textures/gui/archive.png"] = png(archive_gui_texture())
 
     files[f"assets/{NS}/textures/gui/table.png"] = png(gui_texture())
     for (registry, tname), values in tags.items():
