@@ -52,6 +52,7 @@ pub const INFUSIONS: &[(&str, &str, [f32; 3], [f32; 3], u32)] = &[
     ("minecraft:amethyst_block", "minecraft:budding_amethyst", [60.0, 30.0, 50.0], [-1.0, 50.0, -1.0], 1),
     ("vastenchanting:tattered_tome", "vastenchanting:bound_tome", [40.0, 20.0, 30.0], [-1.0, 50.0, -1.0], 2),
     ("vastenchanting:bound_tome", "vastenchanting:siphon_tome", [55.0, 25.0, 45.0], [-1.0, 70.0, -1.0], 2),
+    ("vastenchanting:arcane_archive", "vastenchanting:void_archive", [95.0, 40.0, 90.0], [-1.0, 50.0, -1.0], 1),
 ];
 // ---- end generated ----
 
@@ -583,7 +584,13 @@ pub(in crate::game) fn menu_button(game: &mut Game<'_>, pos: [i32; 3], entity: &
         return;
     }
     let result = if slot == 2 && let Some(i) = offers.infusion {
-        ItemStack::new(INFUSIONS[i].1, INFUSIONS[i].4)
+        let mut out = ItemStack::new(INFUSIONS[i].1, INFUSIONS[i].4);
+        // An archive infused into the next keeps what it holds.
+        if let Some(Tag::Compound(mut held)) = stack.data().and_then(|d| d.other(BLOCK_ENTITY_DATA)).cloned() {
+            held.insert(java("id"), Tag::String(java(INFUSIONS[i].1)));
+            out.data_mut().set_other(BLOCK_ENTITY_DATA, Some(Tag::Compound(held)));
+        }
+        out
     } else {
         let list = &offers.lists[slot];
         if list.is_empty() {
@@ -765,7 +772,7 @@ pub fn screen_click(block: &str, data: &[i32], at: [f32; 2], right: bool, button
 pub(in crate::game) fn screen_tooltip(game: &Game<'_>, block: &str, data: &[i32], at: [f32; 2], lines: &mut Vec<String>) {
     if archive_cap(block).is_some() {
         MOUSE.with_borrow_mut(|m| *m = at);
-        archive_tooltip(game, data, at, lines);
+        archive_tooltip(game, block, data, at, lines);
         return;
     }
     if block != TABLE {
@@ -946,6 +953,7 @@ pub(in crate::game) fn anvil_taken(game: &mut Game<'_>, player: u128, pos: [i32;
 // level more (left) or as high as the points allow (right). Its saved data goes with its item when it's broken.
 
 pub const ARCHIVE: &str = "vastenchanting:arcane_archive";
+pub const VOID_ARCHIVE: &str = "vastenchanting:void_archive";
 pub const ARCHIVE_MENU: &str = "vastenchanting:archive";
 /// Enchantments the screen can show: three data slots each (points' low and high 15 bits, highest level).
 const ARCHIVE_CAP: usize = 64;
@@ -956,7 +964,11 @@ const BLOCK_ENTITY_DATA: &str = "minecraft:block_entity_data";
 
 /// The highest level an archive keeps.
 fn archive_cap(block: &str) -> Option<u32> {
-    (block == ARCHIVE).then_some(16)
+    match block {
+        ARCHIVE => Some(16),
+        VOID_ARCHIVE => Some(31),
+        _ => None,
+    }
 }
 
 fn points_for(level: u32) -> i64 {
@@ -1226,7 +1238,7 @@ fn archive_click(data: &[i32], at: [f32; 2], right: bool, button: &mut Option<i3
     }
 }
 
-fn archive_tooltip(game: &Game<'_>, data: &[i32], at: [f32; 2], lines: &mut Vec<String>) {
+fn archive_tooltip(game: &Game<'_>, block: &str, data: &[i32], at: [f32; 2], lines: &mut Vec<String>) {
     if data.len() < ARCHIVE_DATA {
         return;
     }
@@ -1254,7 +1266,7 @@ fn archive_tooltip(game: &Game<'_>, data: &[i32], at: [f32; 2], lines: &mut Vec<
             lang("vastenchanting.archive.points", "%s points stored").replacen("%s", &points.to_string(), 1)
         };
         lines.push(format!("§7{stored_line}"));
-        let cap = archive_cap(ARCHIVE).unwrap_or(16);
+        let cap = archive_cap(block).unwrap_or(16);
         lines.push(format!("§7{}", lang("vastenchanting.archive.max", "Up to level %s (this archive keeps up to %s)")
             .replacen("%s", &level.to_string(), 1).replacen("%s", &cap.to_string(), 1)));
         if can < level {

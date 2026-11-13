@@ -62,6 +62,7 @@ INFUSIONS = [
     ("minecraft:amethyst_block", "minecraft:budding_amethyst", (60, 30, 50), (-1, 50, -1), 1),
     ("vastenchanting:tattered_tome", "vastenchanting:bound_tome", (40, 20, 30), (-1, 50, -1), 2),
     ("vastenchanting:bound_tome", "vastenchanting:siphon_tome", (55, 25, 45), (-1, 70, -1), 2),
+    ("vastenchanting:arcane_archive", "vastenchanting:void_archive", (95, 40, 90), (-1, 50, -1), 1),
 ]
 
 # ---- the tomes ------------------------------------------------------------------------------------------------------
@@ -86,8 +87,13 @@ VAST_DEPTHS = {"stellarite_shelf": "stellarite", "infernium_shelf": "infernium",
 # ---- the archive ----------------------------------------------------------------------------------------------------
 # Stores enchanted books as points (a level-L book is worth 2^(L-1)) and writes them back onto books.
 # id, english, portuguese, highest level it keeps
+# id, english, portuguese, highest level it keeps, colours (frame, dark frame, trim, sigil, glow, books)
 ARCHIVES = [
-    ("arcane_archive", "Arcane Archive", "Arquivo Arcano", 16),
+    ("arcane_archive", "Arcane Archive", "Arquivo Arcano", 16,
+     (0x2E1C40, 0x1A1026, 0xF0B33A, 0x2A5ADC, 0x5AF0E6, (0x3A4ABA, 0x6A2A9A, 0x1E7A8A, 0x8A3A6A, 0x2A6ACA, 0x4A1E7A))),
+    # Infused from an arcane archive at the table; what it holds goes along.
+    ("void_archive", "Void Archive", "Arquivo do Vazio", 31,
+     (0x1A0E26, 0x0A0612, 0xC23CE6, 0x6A1E8A, 0xFF8AFF, (0x5A1E8A, 0x8A3AB0, 0x2A0E4A, 0xB06AD6, 0x3A1E6A, 0xE06AFF))),
 ]
 
 # ---- art ------------------------------------------------------------------------------------------------------------
@@ -372,12 +378,11 @@ def gui_texture():
     return px
 
 
-def archive_textures():
-    """The archive's side (two shelves of books behind a gold-trimmed frame, a band of runes between), top (a lapis
-    sigil in a ring) and bottom."""
-    frame, frame_dark = rgb(0x2E1C40), rgb(0x1A1026)
-    gold, lapis, glow = rgb(0xF0B33A), rgb(0x2A5ADC), rgb(0x5AF0E6)
-    books = [rgb(c) for c in (0x3A4ABA, 0x6A2A9A, 0x1E7A8A, 0x8A3A6A, 0x2A6ACA, 0x4A1E7A)]
+def archive_textures(colours):
+    """An archive's side (two shelves of books behind a trimmed frame, a band of runes between), top (a sigil in a
+    ring) and bottom, in its colours."""
+    frame, frame_dark, gold, lapis, glow = (rgb(c) for c in colours[:5])
+    books = [rgb(c) for c in colours[5]]
     rnd = random.Random(11)
     side = [[CLEAR] * 16 for _ in range(16)]
     for y in range(16):
@@ -653,8 +658,8 @@ def build(out):
         "pattern": [" S ", "BIB", " S "], "result": {"id": f"{NS}:tattered_tome", "count": 2}}
 
     # The archive.
-    side, top, bottom = archive_textures()
-    for name, en, pt, cap in ARCHIVES:
+    for name, en, pt, cap, colours in ARCHIVES:
+        side, top, bottom = archive_textures(colours)
         files[f"data/{NS}/horizon/block/{name}.json"] = {
             "template": "minecraft:beacon", "item": True,
             # No tool needed: a hand breaking it must still drop it, with what it holds.
