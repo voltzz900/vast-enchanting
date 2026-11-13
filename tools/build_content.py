@@ -728,7 +728,7 @@ def build(out):
             target.write_text(json.dumps(value, indent=2, ensure_ascii=False) + "\n")
     (out / "horizon-mod.toml").write_text(
         f'id = "{NS}"\nname = "Vast Enchanting (content)"\nversion = "{VERSION}"\n'
-        'description = "The Vast Enchanting Table and its shelves: blocks, art, recipes and names. Needs the native mod."\n'
+        'description = "The Vast Enchanting Table, its shelves, tomes and archives: blocks, items, art, recipes and names. Needs the native mod."\n'
         'authors = ["voltzz900"]\napi = "0.2"\nside = "both"\ncapabilities = ["registries"]\n')
     write_rust()
     print(f"{NS}: {len(items)} blocks and items, {len(files) + 1} files")

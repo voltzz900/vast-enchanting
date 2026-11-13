@@ -31,6 +31,7 @@ def main():
         for f in sorted(BUNDLE.iterdir()):
             if f.is_file():
                 add(z, f"mixins/vastenchanting_native/{f.name}", f.read_bytes())
+        add(z, "mixins/vastenchanting_native/NOTICE-apothic-enchanting.txt", (ROOT / "NOTICE-apothic-enchanting.txt").read_bytes())
     print(f"{out}  {hashlib.sha256(out.read_bytes()).hexdigest()}")
     # The content mod, built fresh.
     import subprocess, sys
