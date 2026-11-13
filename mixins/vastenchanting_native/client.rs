@@ -630,13 +630,14 @@ pub(in crate::game) fn screen_draw(game: &Game<'_>, block: &str, data: &[i32], b
         let colour = if levels >= cost { 0x80FF20 } else { 0xFF6A6A };
         let lw = game.native_text_width(&level);
         game.native_text(batch, &level, [ox + r[0] + r[2] - lw - 4.0, oy + r[1] + 6.0], colour, true);
-        let text = if i == 2 && data[D_INFUSE] > 0 {
-            format!("» {}", infusion_name(game, data[D_INFUSE] as usize - 1))
+        // An infusion offer shows its result's name in pink; the tooltip says "Infuse into".
+        let (text, tint) = if i == 2 && data[D_INFUSE] > 0 {
+            (infusion_name(game, data[D_INFUSE] as usize - 1), 0xFF9CFF)
         } else {
-            clue(e, data, i, 0).map_or_else(|| lang("vastenchanting.unknown", "Unknown enchantments"), |c| c.0)
+            (clue(e, data, i, 0).map_or_else(|| lang("vastenchanting.unknown", "Unknown enchantments"), |c| c.0), 0xE6DCF0)
         };
-        let room = r[2] - 22.0 - lw - 6.0;
-        game.native_text(batch, &fit(game, &text, room), [ox + r[0] + 20.0, oy + r[1] + 6.0], 0xE6DCF0, true);
+        let room = r[2] - 18.0 - lw - 5.0;
+        game.native_text(batch, &fit(game, &text, room), [ox + r[0] + 17.0, oy + r[1] + 6.0], tint, true);
     }
     // The stats.
     let rows = [
