@@ -660,6 +660,7 @@ def build(out):
     lang_en.update({
         "vastenchanting.archive.empty": "Nothing stored yet: put an enchanted book in the top slot.",
         "vastenchanting.archive.points": "%s points stored",
+        "vastenchanting.archive.point": "1 point stored",
         "vastenchanting.archive.max": "Up to level %s (this archive keeps up to %s)",
         "vastenchanting.archive.cost": "Level %s costs %s points from a plain book",
         "vastenchanting.archive.click": "Left click: one level more on the bottom book",
@@ -668,6 +669,7 @@ def build(out):
     lang_pt.update({
         "vastenchanting.archive.empty": "Nada guardado ainda: coloque um livro encantado no espaço de cima.",
         "vastenchanting.archive.points": "%s pontos guardados",
+        "vastenchanting.archive.point": "1 ponto guardado",
         "vastenchanting.archive.max": "Até o nível %s (este arquivo guarda até %s)",
         "vastenchanting.archive.cost": "Nível %s custa %s pontos num livro comum",
         "vastenchanting.archive.click": "Clique esquerdo: um nível a mais no livro de baixo",

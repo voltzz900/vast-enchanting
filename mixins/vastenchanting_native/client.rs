@@ -1178,7 +1178,12 @@ fn archive_tooltip(game: &Game<'_>, data: &[i32], at: [f32; 2], lines: &mut Vec<
         let can = affordable(points, level);
         let (name, curse) = e.full_name(&ench.id, can.max(1));
         lines.push(format!("{}{name}", if curse { "§c" } else { "§f" }));
-        lines.push(format!("§7{}", lang("vastenchanting.archive.points", "%s points stored").replacen("%s", &points.to_string(), 1)));
+        let stored_line = if points == 1 {
+            lang("vastenchanting.archive.point", "1 point stored")
+        } else {
+            lang("vastenchanting.archive.points", "%s points stored").replacen("%s", &points.to_string(), 1)
+        };
+        lines.push(format!("§7{stored_line}"));
         let cap = archive_cap(ARCHIVE).unwrap_or(16);
         lines.push(format!("§7{}", lang("vastenchanting.archive.max", "Up to level %s (this archive keeps up to %s)")
             .replacen("%s", &level.to_string(), 1).replacen("%s", &cap.to_string(), 1)));
