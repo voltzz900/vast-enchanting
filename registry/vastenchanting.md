@@ -1,6 +1,6 @@
 # Registry page: Vast Enchanting
 
-- **File:** `vastenchanting-0.2.0.hmod` (release v0.2.0), kind: native mod
+- **File:** `vastenchanting-0.2.1.hmod` (release v0.2.1), kind: native mod
 - **Icon:** `icons/vastenchanting.png`
 - **Name:** Vast Enchanting
 - **Summary:** An enchanting table that reads its shelves and goes past max levels, tomes for the anvil, and archives that store enchanted books.
@@ -22,4 +22,4 @@ A native mod for enchanting, whose table follows the MIT code of [Apothic Enchan
 
 **What it changes in the game**: the Vast Enchanting Table's offers and the levels and lapis they take, the anvil's result when a tome is on its right, a broken archive's drop (it carries what it held) and its contents when placed. It works through the mod API (block entity, menu and item Parts, the anvil and drop hooks; no mixins). Everything lives in the blocks' own data; no files, no network.
 
-0.2.0 replaces 0.1.0's two files (`vastenchanting_native` .hnmod and the `vastenchanting` content mod); blocks placed with 0.1 keep what they hold. Pinned to Horizon 702ab1e. Not yet: Apothic Enchanting's own enchantments (Horizon loads only the game's), typed tomes and the prismatic web. Not affiliated with or endorsed by Apothic Enchanting's authors; none of its assets or lang are used.
+0.2.0 replaces 0.1.0's two files (`vastenchanting_native` .hnmod and the `vastenchanting` content mod); blocks placed with 0.1 keep what they hold. Pinned to Horizon 0b14f8a. Not yet: Apothic Enchanting's own enchantments (Horizon loads only the game's), typed tomes and the prismatic web. Not affiliated with or endorsed by Apothic Enchanting's authors; none of its assets or lang are used.
