@@ -30,6 +30,7 @@ impl Items for HostItems<'_> {
         match self.0.item_default_component(key, "minecraft:enchantable") {
             Some(Tag::Compound(c)) => nbt::get_i(&c, "value", 0),
             Some(Tag::Int(v)) => v,
+            Some(Tag::Long(v)) => v as i32,
             _ => 0,
         }
     }
@@ -180,7 +181,9 @@ pub fn menu_button(host: &mut dyn ServerHost, event: &mut MenuButtonEvent<'_>) {
     event.entity.items[ITEM] = Some(result);
     if !creative {
         event.entity.items[LAPIS] = lapis.and_then(|l| l.shrink(need as u32));
-        player.give_levels(host, -need);
+        if !player.give_levels(host, -need) {
+            player.set_experience_levels(host, (levels - need).max(0));
+        }
     }
     nbt::set_i(&mut event.entity.nbt, "seed", enchant::next_seed(seed, levels));
     event.entity.data.clear();

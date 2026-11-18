@@ -145,6 +145,15 @@ impl BlockEntityPart for ArchivePart {
     }
 }
 
+/// The veto shelf's block entity: it only holds books, which the table reads.
+struct VetoPart;
+
+#[mod_api::horizon_part]
+impl BlockPart for VetoPart {}
+
+#[mod_api::horizon_part]
+impl BlockEntityPart for VetoPart {}
+
 /// What the table's and the archives' slots take.
 struct SlotRules;
 
@@ -230,7 +239,8 @@ impl Hooks for VastEnchanting {
         }
         // The veto shelf holds its books in a hopper's menu.
         let veto = name(enchant::VETO_SHELF);
-        let _ = r.block_entity_type(veto).blocks(&[veto]).build();
+        let kind = r.block_entity_type(veto).blocks(&[veto]).build();
+        r.block_entity_part(&kind, VetoPart).expect("Vast Enchanting: the veto shelf's block entity");
         let block = r.block_key(enchant::VETO_SHELF);
         r.block_container(&block, container(table::VETO_SLOTS, Vec::new(), "minecraft:hopper"));
         r.menu_part(table::MENU, SlotRules);

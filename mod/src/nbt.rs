@@ -16,6 +16,9 @@ pub fn get_i(nbt: &Compound, key: &str, default: i32) -> i32 {
         Some(Tag::Int(v)) => *v,
         Some(Tag::Short(v)) => i32::from(*v),
         Some(Tag::Byte(v)) => i32::from(*v),
+        // Item defaults are read from JSON: a number may come as a Long or a Double.
+        Some(Tag::Long(v)) => (*v).clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32,
+        Some(Tag::Double(v)) => f64::from_bits(*v) as i32,
         _ => default,
     }
 }
