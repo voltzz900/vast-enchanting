@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:block",
+  "random_sequence": "vastenchanting:blocks/ember_shelf",
+  "pools": [
+    {
+      "rolls": 1,
+      "entries": [
+        {
+          "type": "minecraft:item",
+          "name": "vastenchanting:ember_shelf"
+        }
+      ],
+      "condition": {
+        "type": "minecraft:survives_explosion"
+      }
+    }
+  ]
+}

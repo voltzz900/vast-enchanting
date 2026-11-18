@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "group": "vastenchanting_shelves",
+  "key": {
+    "B": "minecraft:blaze_powder",
+    "F": "minecraft:fire_charge",
+    "I": "vastenchanting:infused_ember_shelf"
+  },
+  "pattern": [
+    "BFB",
+    "FIF",
+    "BFB"
+  ],
+  "result": {
+    "id": "vastenchanting:blazing_ember_shelf"
+  }
+}

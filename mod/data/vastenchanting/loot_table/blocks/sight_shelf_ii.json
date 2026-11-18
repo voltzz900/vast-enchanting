@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:block",
+  "random_sequence": "vastenchanting:blocks/sight_shelf_ii",
+  "pools": [
+    {
+      "rolls": 1,
+      "entries": [
+        {
+          "type": "minecraft:item",
+          "name": "vastenchanting:sight_shelf_ii"
+        }
+      ],
+      "condition": {
+        "type": "minecraft:survives_explosion"
+      }
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:block",
+  "random_sequence": "vastenchanting:blocks/infused_tide_shelf",
+  "pools": [
+    {
+      "rolls": 1,
+      "entries": [
+        {
+          "type": "minecraft:item",
+          "name": "vastenchanting:infused_tide_shelf"
+        }
+      ],
+      "condition": {
+        "type": "minecraft:survives_explosion"
+      }
+    }
+  ]
+}

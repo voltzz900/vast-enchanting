@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "group": "vastenchanting_shelves",
+  "key": {
+    "E": "minecraft:echo_shard",
+    "A": "vastenchanting:abyss_shelf",
+    "C": "minecraft:sculk_vein"
+  },
+  "pattern": [
+    "CEC",
+    "CAC",
+    "CCC"
+  ],
+  "result": {
+    "id": "vastenchanting:echoing_abyss_shelf"
+  }
+}

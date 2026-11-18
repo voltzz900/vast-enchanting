@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "group": "vastenchanting_shelves",
+  "key": {
+    "G": "minecraft:gold_ingot",
+    "D": "minecraft:diamond",
+    "E": "minecraft:emerald",
+    "O": "minecraft:bookshelf"
+  },
+  "pattern": [
+    "GDG",
+    "EOE",
+    "GDG"
+  ],
+  "result": {
+    "id": "vastenchanting:relic_shelf"
+  }
+}

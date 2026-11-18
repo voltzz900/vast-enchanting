@@ -1,0 +1,7 @@
+{
+  "parent": "minecraft:block/cube_column",
+  "textures": {
+    "end": "vastenchanting:block/draconic_void_shelf_end",
+    "side": "vastenchanting:block/draconic_void_shelf"
+  }
+}

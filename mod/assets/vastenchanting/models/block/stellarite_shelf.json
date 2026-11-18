@@ -1,0 +1,7 @@
+{
+  "parent": "minecraft:block/cube_column",
+  "textures": {
+    "end": "vastenchanting:block/stellarite_shelf_end",
+    "side": "vastenchanting:block/stellarite_shelf"
+  }
+}

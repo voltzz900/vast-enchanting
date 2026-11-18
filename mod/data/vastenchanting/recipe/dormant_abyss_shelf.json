@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "group": "vastenchanting_shelves",
+  "key": {
+    "T": "minecraft:deepslate_tiles",
+    "B": "minecraft:book",
+    "S": "minecraft:sculk"
+  },
+  "pattern": [
+    "TTT",
+    "BSB",
+    "TTT"
+  ],
+  "result": {
+    "id": "vastenchanting:dormant_abyss_shelf"
+  }
+}

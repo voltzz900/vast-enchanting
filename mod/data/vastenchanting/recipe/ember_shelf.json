@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "group": "vastenchanting_shelves",
+  "key": {
+    "N": "minecraft:nether_bricks",
+    "B": "minecraft:blaze_rod",
+    "O": "minecraft:bookshelf",
+    "M": "minecraft:magma_cream"
+  },
+  "pattern": [
+    "NNN",
+    "BOM",
+    "NNN"
+  ],
+  "result": {
+    "id": "vastenchanting:ember_shelf"
+  }
+}

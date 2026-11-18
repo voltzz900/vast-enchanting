@@ -1,0 +1,11 @@
+{
+  "template": "minecraft:beacon",
+  "item": true,
+  "properties": {
+    "hardness": 3.0,
+    "explosion_resistance": 1200.0,
+    "light": 5,
+    "requires_tool": false,
+    "sounds": "minecraft:chiseled_bookshelf"
+  }
+}

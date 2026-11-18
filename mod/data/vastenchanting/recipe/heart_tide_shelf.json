@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "group": "vastenchanting_shelves",
+  "key": {
+    "H": "minecraft:heart_of_the_sea",
+    "S": "minecraft:prismarine_shard",
+    "I": "vastenchanting:infused_tide_shelf"
+  },
+  "pattern": [
+    "SHS",
+    "SIS",
+    "SSS"
+  ],
+  "result": {
+    "id": "vastenchanting:heart_tide_shelf"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "parent": "minecraft:block/cube_column",
+  "textures": {
+    "end": "vastenchanting:block/echoing_abyss_shelf_end",
+    "side": "vastenchanting:block/echoing_abyss_shelf"
+  }
+}

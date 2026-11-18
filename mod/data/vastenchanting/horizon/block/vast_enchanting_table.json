@@ -1,0 +1,11 @@
+{
+  "template": "minecraft:beacon",
+  "item": true,
+  "properties": {
+    "hardness": 5.0,
+    "explosion_resistance": 1200.0,
+    "light": 7,
+    "requires_tool": true,
+    "sounds": "minecraft:obsidian"
+  }
+}

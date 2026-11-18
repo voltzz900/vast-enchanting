@@ -1,0 +1,24 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "group": "vastenchanting_shelves",
+  "key": {
+    "I": "vastdepths:infernium_ingot",
+    "B": "minecraft:bookshelf",
+    "V": "vastenchanting:void_shelf"
+  },
+  "pattern": [
+    "IBI",
+    "BVB",
+    "IBI"
+  ],
+  "result": {
+    "id": "vastenchanting:infernium_shelf"
+  },
+  "neoforge:conditions": [
+    {
+      "type": "neoforge:mod_loaded",
+      "modid": "vastdepths"
+    }
+  ]
+}

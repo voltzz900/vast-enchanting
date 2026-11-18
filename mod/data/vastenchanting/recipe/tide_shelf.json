@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "group": "vastenchanting_shelves",
+  "key": {
+    "P": "minecraft:prismarine_bricks",
+    "C": "minecraft:prismarine_crystals",
+    "O": "minecraft:bookshelf",
+    "S": "minecraft:nautilus_shell"
+  },
+  "pattern": [
+    "PPP",
+    "COS",
+    "PPP"
+  ],
+  "result": {
+    "id": "vastenchanting:tide_shelf"
+  }
+}

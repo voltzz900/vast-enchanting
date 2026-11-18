@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""Builds Vast Enchanting's content mod (`vastenchanting`): the Vast Enchanting Table, the shelves around it, their
-art (drawn here, pixel by pixel), recipes, loot and names; and writes the shelves' numbers and the infusions as Rust
-(between the markers in `mixins/vastenchanting_native/client.rs`), so the native mod and the content read one table.
+"""Builds Vast Enchanting's data and assets into `mod/` (the mod's package): the Vast Enchanting Table, the shelves
+around it, the tomes and archives, their art (drawn here, pixel by pixel), recipes, loot and names; and writes
+`mod/src/data.rs` for the code: the shelves' numbers, the infusions and vanilla's enchantments (costs, levels,
+weights, the items they go on, what they exclude, read from a prepared Horizon game's data, since the server's mod
+API has no enchantment registry), plus `mod/horizon-mod.toml`.
 
 The way the table works (power, chaos, rarity and clues gathered from the blocks around it, offers up to level 100,
 infusions) follows Apothic Enchanting's MIT code by Shadows_of_Fire; the names, art and recipes are this mod's own.
 
-Usage: build_content.py <output dir>   (writes <output dir>/vastenchanting)
+Usage: build_content.py
 """
 import json
 import math
@@ -18,7 +20,13 @@ import zlib
 from pathlib import Path
 
 NS = "vastenchanting"
-VERSION = "0.1.0"
+VERSION = "0.2.0"
+# The Horizon build the mod is made for, and the horizon-mixins tool its `[native]` names.
+HORIZON = "702ab1e3b42921ef025841802e59d64060b6c0b4"
+MIXINS = "e59da9094f0c2fdda6c627fe9eff22dec6a906f0"
+# Vanilla's data (enchantments and their tags), read for the selection's numbers (any prepared Horizon 26.3 game).
+VANILLA = sorted(Path.home().glob(
+    "Library/Application Support/horizon-launcher/versions/*/.local/horizon-client/26.3/data/minecraft"))
 ROOT = Path(__file__).resolve().parent.parent
 
 # ---- the shelves ------------------------------------------------------------------------------------------------------
@@ -716,9 +724,10 @@ def build(out):
     files[f"assets/{NS}/lang/en_us.json"] = dict(sorted(lang_en.items()))
     files[f"assets/{NS}/lang/pt_br.json"] = dict(sorted(lang_pt.items()))
 
-    out = Path(out) / NS
-    if out.exists():
-        shutil.rmtree(out)
+    out = Path(out)
+    for sub in ("assets", "data"):
+        if (out / sub).exists():
+            shutil.rmtree(out / sub)
     for path, value in files.items():
         target = out / path
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -727,31 +736,102 @@ def build(out):
         else:
             target.write_text(json.dumps(value, indent=2, ensure_ascii=False) + "\n")
     (out / "horizon-mod.toml").write_text(
-        f'id = "{NS}"\nname = "Vast Enchanting (content)"\nversion = "{VERSION}"\n'
-        'description = "The Vast Enchanting Table, its shelves, tomes and archives: blocks, items, art, recipes and names. Needs the native mod."\n'
-        'authors = ["voltzz900"]\napi = "0.2"\nside = "both"\ncapabilities = ["registries"]\n')
-    write_rust()
+        f'id = "{NS}"\nname = "Vast Enchanting"\nversion = "{VERSION}"\n'
+        'description = "An enchanting table read from the shelves around it: power, chaos, rarity and clues, offers past '
+        'vanilla\'s levels, infusions, tomes and archives that keep enchantments."\n'
+        'authors = ["voltzz900"]\napi = "0.2"\nside = "both"\ncapabilities = ["registries"]\n\n'
+        f'[native]\ngame = "26.3"\nhorizon = "{HORIZON}"\nmixins = "{MIXINS}"\n')
+    write_rust(out)
     print(f"{NS}: {len(items)} blocks and items, {len(files) + 1} files")
 
 
-def write_rust():
-    """The shelves' numbers and the infusions, for the native mod: between the markers in its client.rs."""
-    lines = ["/// A block the table reads: (block, max power it may raise to, power, chaos, rarity, clues).",
+def vanilla():
+    if not VANILLA:
+        raise SystemExit("no prepared Horizon game with vanilla's data found")
+    return VANILLA[-1]
+
+
+def enchantment_tag(name, seen=()):
+    """The enchantments in tag `name` (`minecraft:treasure`), its nested tags resolved."""
+    ns, path = name.lstrip("#").split(":", 1)
+    out = []
+    for v in json.loads((vanilla().parent / ns / "tags/enchantment" / f"{path}.json").read_text())["values"]:
+        v = v["id"] if isinstance(v, dict) else v
+        if v.startswith("#"):
+            if v not in seen:
+                out += enchantment_tag(v, seen + (v,))
+        else:
+            out.append(v)
+    return out
+
+
+def holders(value):
+    """An item or enchantment holder set as a list: ids, or `#tag`s left to resolve at run time."""
+    if value is None:
+        return []
+    return value if isinstance(value, list) else [value]
+
+
+def rust_strs(values):
+    return "&[" + ", ".join(f'"{v}"' for v in values) + "]"
+
+
+def enchantments_rust():
+    """Vanilla's enchantments, sorted by id (their index travels in data slots, buttons and the veto bitmask)."""
+    table, treasure, curse = (set(enchantment_tag(t)) for t in
+                              ("minecraft:in_enchanting_table", "minecraft:treasure", "minecraft:curse"))
+    lines = []
+    for f in sorted((vanilla() / "enchantment").glob("*.json")):
+        e = json.loads(f.read_text())
+        eid = f"minecraft:{f.stem}"
+        exclusive = []
+        for v in holders(e.get("exclusive_set")):
+            exclusive += enchantment_tag(v) if v.startswith("#") else [v]
+        lines.append(
+            f'    Ench {{ id: "{eid}", max_level: {e["max_level"]}, weight: {e["weight"]}, '
+            f'min_cost: ({e["min_cost"]["base"]}, {e["min_cost"]["per_level_above_first"]}), '
+            f'supported: {rust_strs(holders(e["supported_items"]))}, primary: {rust_strs(holders(e.get("primary_items")))}, '
+            f'exclusive: {rust_strs(sorted(set(exclusive) - {eid}))}, table: {str(eid in table).lower()}, '
+            f'treasure: {str(eid in treasure).lower()}, curse: {str(eid in curse).lower()} }},')
+    return lines
+
+
+def write_rust(out):
+    """The shelves' numbers, the infusions and vanilla's enchantments, for the code."""
+    lines = ["//! The table's numbers: written by tools/build_content.py (shelves and infusions from its lists,",
+             "//! enchantments from vanilla's data).", "",
+             "/// A block the table reads: (block, max power it may raise to, power, chaos, rarity, clues).",
              "pub const STATS: &[(&str, f32, f32, f32, f32, i32)] = &["]
     for name, (mx, e, q, a, c) in [(f"{NS}:{n}", s) for n, _, _, _, s in SHELVES] + VANILLA_STATS:
         lines.append(f'    ("{name}", {float(mx)}, {float(e)}, {float(q)}, {float(a)}, {c}),')
-    lines += ["];", "/// (input, result, minimum power, chaos, rarity, maximum power, chaos, rarity (-1 for none), how many).",
+    lines += ["];", "", "/// (input, result, minimum power, chaos, rarity, maximum power, chaos, rarity (-1 for none), how many).",
               "pub const INFUSIONS: &[(&str, &str, [f32; 3], [f32; 3], u32)] = &["]
     for inp, res, mn, mx, n in INFUSIONS:
         lines.append(f'    ("{inp}", "{res}", [{", ".join(str(float(v)) for v in mn)}], '
                      f'[{", ".join(str(float(v)) for v in mx)}], {n}),')
+    lines += ["];", "",
+              "/// A vanilla enchantment, as the table's selection reads it.",
+              "pub struct Ench {",
+              "    pub id: &'static str,",
+              "    pub max_level: u32,",
+              "    pub weight: u32,",
+              "    /// Minimum cost: base and per level above the first.",
+              "    pub min_cost: (i32, i32),",
+              "    /// The items it may go on, and those a table offers it for (empty: the same): ids or `#tag`s.",
+              "    pub supported: &'static [&'static str],",
+              "    pub primary: &'static [&'static str],",
+              "    /// Enchantments it can't share an item with.",
+              "    pub exclusive: &'static [&'static str],",
+              "    /// In `#minecraft:in_enchanting_table`, `#minecraft:treasure`, `#minecraft:curse`.",
+              "    pub table: bool,",
+              "    pub treasure: bool,",
+              "    pub curse: bool,",
+              "}", "",
+              "pub const ENCHANTMENTS: &[Ench] = &["]
+    lines += enchantments_rust()
     lines.append("];")
-    path = ROOT / "mixins/vastenchanting_native/client.rs"
-    text = path.read_text()
-    start, end = "// ---- generated: shelves (tools/build_content.py writes this part) ----\n", "// ---- end generated ----"
-    a, b = text.index(start) + len(start), text.index(end)
-    path.write_text(text[:a] + "\n".join(lines) + "\n" + text[b:])
+    (out / "src/data.rs").write_text("\n".join(lines) + "\n")
 
 
 if __name__ == "__main__":
-    build(sys.argv[1] if len(sys.argv) > 1 else ROOT / "build")
+    build(ROOT / "mod")

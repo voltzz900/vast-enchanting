@@ -1,0 +1,7 @@
+{
+  "parent": "minecraft:block/cube_column",
+  "textures": {
+    "end": "vastenchanting:block/sight_shelf_ii_end",
+    "side": "vastenchanting:block/sight_shelf_ii"
+  }
+}

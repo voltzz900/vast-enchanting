@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:block",
+  "random_sequence": "vastenchanting:blocks/vast_enchanting_table",
+  "pools": [
+    {
+      "rolls": 1,
+      "entries": [
+        {
+          "type": "minecraft:item",
+          "name": "vastenchanting:vast_enchanting_table"
+        }
+      ],
+      "condition": {
+        "type": "minecraft:survives_explosion"
+      }
+    }
+  ]
+}

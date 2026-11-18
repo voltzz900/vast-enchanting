@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "group": "vastenchanting_shelves",
+  "key": {
+    "S": "minecraft:stone_bricks",
+    "I": "minecraft:iron_bars",
+    "R": "minecraft:redstone",
+    "O": "minecraft:bookshelf"
+  },
+  "pattern": [
+    "SIS",
+    "ROR",
+    "SIS"
+  ],
+  "result": {
+    "id": "vastenchanting:veto_bookcase"
+  }
+}

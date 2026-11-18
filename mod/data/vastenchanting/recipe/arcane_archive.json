@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "I": "#vastenchanting:infused_shelves",
+    "C": "minecraft:chiseled_bookshelf",
+    "Y": "minecraft:ender_eye",
+    "T": "vastenchanting:vast_enchanting_table",
+    "L": "minecraft:lapis_block"
+  },
+  "pattern": [
+    "ICI",
+    "YTY",
+    "LLL"
+  ],
+  "result": {
+    "id": "vastenchanting:arcane_archive"
+  }
+}

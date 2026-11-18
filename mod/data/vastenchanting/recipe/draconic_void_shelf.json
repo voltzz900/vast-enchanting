@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "group": "vastenchanting_shelves",
+  "key": {
+    "D": "minecraft:dragon_head",
+    "V": "vastenchanting:void_shelf",
+    "P": "minecraft:ender_pearl"
+  },
+  "pattern": [
+    "PDP",
+    "PVP",
+    "PPP"
+  ],
+  "result": {
+    "id": "vastenchanting:draconic_void_shelf"
+  }
+}

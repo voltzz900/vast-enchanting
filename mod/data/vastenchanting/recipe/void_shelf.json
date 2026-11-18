@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "group": "vastenchanting_shelves",
+  "key": {
+    "E": "minecraft:end_stone_bricks",
+    "C": "minecraft:popped_chorus_fruit",
+    "O": "minecraft:bookshelf",
+    "P": "minecraft:ender_pearl"
+  },
+  "pattern": [
+    "EEE",
+    "COP",
+    "EEE"
+  ],
+  "result": {
+    "id": "vastenchanting:void_shelf"
+  }
+}

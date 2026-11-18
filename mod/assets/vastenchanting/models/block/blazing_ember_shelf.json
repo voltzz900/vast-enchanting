@@ -1,0 +1,7 @@
+{
+  "parent": "minecraft:block/cube_column",
+  "textures": {
+    "end": "vastenchanting:block/blazing_ember_shelf_end",
+    "side": "vastenchanting:block/blazing_ember_shelf"
+  }
+}

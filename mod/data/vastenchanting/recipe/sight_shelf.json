@@ -1,0 +1,20 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "group": "vastenchanting_shelves",
+  "key": {
+    "G": "minecraft:gold_block",
+    "A": "minecraft:amethyst_shard",
+    "S": "minecraft:spyglass",
+    "O": "minecraft:bookshelf",
+    "Y": "minecraft:ender_eye"
+  },
+  "pattern": [
+    "GAG",
+    "SOY",
+    "GAG"
+  ],
+  "result": {
+    "id": "vastenchanting:sight_shelf"
+  }
+}

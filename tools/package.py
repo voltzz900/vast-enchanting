@@ -1,49 +1,30 @@
 #!/usr/bin/env python3
-"""Packs dist/vastenchanting_native-<v>.hnmod (the native mod) and dist/vastenchanting-<v>.hmod (the content). Deterministic."""
+"""Builds the mod's data and assets, then packs `mod/` into dist/vastenchanting-<version>.hmod with the official
+packer (`cargo horizon-mod build`, which needs the pinned build's SDK)."""
 import hashlib
-import json
+import shutil
+import subprocess
+import sys
 import tomllib
-import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-BUNDLE = ROOT / "mixins/vastenchanting_native"
-MIXINS = "5a64af938ec86b00d53d16a408aabc0038fb3e57"
-
-
-def add(z, name, data):
-    info = zipfile.ZipInfo(name, (2026, 1, 1, 0, 0, 0))
-    info.compress_type = zipfile.ZIP_DEFLATED
-    z.writestr(info, data)
+MOD = ROOT / "mod"
 
 
 def main():
-    mixin = tomllib.loads((BUNDLE / "horizon-mixin.toml").read_text())
-    version = mixin["mod"]["version"]
-    meta = {"game": "26.3", "horizon": mixin["compatibility"]["horizon_revision"], "id": mixin["mod"]["id"],
-            "mixins": MIXINS, "schema": 1, "version": version}
-    (ROOT / "horizon-native.json").write_text(json.dumps(meta, indent=2, sort_keys=True) + "\n")
+    subprocess.run([sys.executable, "-I", str(ROOT / "tools/build_content.py")], check=True)
+    # The mod has no registry dependencies: a lock from a local `cargo check` is not part of the package.
+    (MOD / "Cargo.lock").unlink(missing_ok=True)
+    for name in ("LICENSE", "NOTICE-apothic-enchanting.txt"):
+        shutil.copy(ROOT / name, MOD / name)
+    subprocess.run(["cargo", "horizon-mod", "build"], cwd=MOD, check=True)
+    version = tomllib.loads((MOD / "horizon-mod.toml").read_text())["version"]
     dist = ROOT / "dist"
     dist.mkdir(exist_ok=True)
-    out = dist / f"vastenchanting_native-{version}.hnmod"
-    with zipfile.ZipFile(out, "w") as z:
-        add(z, "horizon-native.json", (ROOT / "horizon-native.json").read_bytes())
-        for f in sorted(BUNDLE.iterdir()):
-            if f.is_file():
-                add(z, f"mixins/vastenchanting_native/{f.name}", f.read_bytes())
-        add(z, "mixins/vastenchanting_native/NOTICE-apothic-enchanting.txt", (ROOT / "NOTICE-apothic-enchanting.txt").read_bytes())
+    out = dist / f"vastenchanting-{version}.hmod"
+    shutil.copy(MOD / "target/horizon-mod/vastenchanting.hmod", out)
     print(f"{out}  {hashlib.sha256(out.read_bytes()).hexdigest()}")
-    # The content mod, built fresh.
-    import subprocess, sys
-    subprocess.run([sys.executable, "-I", str(ROOT / "tools/build_content.py"), str(ROOT / "build")], check=True)
-    content = ROOT / "build/vastenchanting"
-    cver = tomllib.loads((content / "horizon-mod.toml").read_text())["version"]
-    hmod = dist / f"vastenchanting-{cver}.hmod"
-    with zipfile.ZipFile(hmod, "w") as z:
-        for f in sorted(p for p in content.rglob("*") if p.is_file()):
-            add(z, f.relative_to(content).as_posix(), f.read_bytes())
-        add(z, "LICENSE", (ROOT / "LICENSE").read_bytes())
-    print(f"{hmod}  {hashlib.sha256(hmod.read_bytes()).hexdigest()}")
 
 
 if __name__ == "__main__":
