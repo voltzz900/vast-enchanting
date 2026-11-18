@@ -1,6 +1,6 @@
 # Vast Enchanting
 
-A native mod and a content mod for [Horizon](https://github.com/horizon-rust/horizon): an enchanting table of its
+A native mod for [Horizon](https://github.com/horizon-rust/horizon), on its mod API: an enchanting table of its
 own that reads the shelves around it, offers enchantments past the game's maximum levels and infuses items; tomes
 that take enchantments off items at the anvil; and archives that store enchanted books. The table's rules follow the
 MIT code of [Apothic Enchanting](https://github.com/Shadows-of-Fire/Apothic-Enchanting) (by Shadows_of_Fire); the
@@ -100,18 +100,22 @@ has them all.
 
 ## Install
 
-- **The native mod:** `vastenchanting_native-<version>.hnmod`. Install it, then build natives in the launcher.
-- **The content mod:** `vastenchanting-<version>.hmod`: blocks, items, art, recipes and words in English and
-  Brazilian Portuguese. Install both.
+`vastenchanting-<version>.hmod`: one package with the code, blocks, items, art, recipes and words in English and
+Brazilian Portuguese. Install it, then build natives in the launcher. (0.1 came as two files, `vastenchanting_native`
+and `vastenchanting`; remove both before installing 0.2. Tables, archives and veto bookcases placed with 0.1 keep
+what they hold.)
 
 ## Building
 
-- `tools/build_content.py` builds `build/vastenchanting` (art drawn by code, models, recipes, loot, lang) and writes
-  the shelves' numbers and the infusions into `mixins/vastenchanting_native/client.rs`.
-- `tools/package.py` packs both files into `dist/`.
+The mod is `mod/`, a crate on Horizon's mod API (`mod_api::Hooks`, Parts and the Host; no mixins):
 
-It is pinned to Horizon `fdc87ae` (Nightly 2026-11-08). Besides the native hook points, it hooks the anvil's update
-(`native_anvil_update`) for the tomes and a broken block's drops (`native_block_drops`) for the archives.
+- `tools/build_content.py` writes `mod/assets` and `mod/data` (art drawn by code, models, recipes, loot, lang), and
+  into `mod/src/data.rs` the shelves' numbers, the infusions and vanilla's enchantment facts (costs, weights, items,
+  exclusive sets: the server's mod API doesn't expose the enchantment registry, and Horizon has only vanilla's).
+- `tools/package.py` packs `dist/vastenchanting-<version>.hmod` with `cargo horizon-mod build`.
+
+It is pinned to the Horizon build in `mod/horizon-mod.toml` (`[native] horizon`). An archive blown up by an explosion
+loses what it held (the mod API doesn't hand its data to that drop); one broken by a player keeps it.
 
 ## License
 

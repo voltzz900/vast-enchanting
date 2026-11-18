@@ -1,17 +1,25 @@
-# Registry page: Vast Enchanting (content)
+# Registry page: Vast Enchanting
 
-- **File:** `vastenchanting-0.1.0.hmod` (release v0.1.0), kind: mod
+- **File:** `vastenchanting-0.2.0.hmod` (release v0.2.0), kind: native mod
 - **Icon:** `icons/vastenchanting.png`
-- **Name:** Vast Enchanting (content)
-- **Summary:** The blocks, items, art, recipes and words of Vast Enchanting. Needs the native mod.
-- **Categories:** decoration, magic
-- **Tags:** enchanting, bookshelves, translation
+- **Name:** Vast Enchanting
+- **Summary:** An enchanting table that reads its shelves and goes past max levels, tomes for the anvil, and archives that store enchanted books.
+- **Categories:** game mechanics, magic, storage
+- **Tags:** enchanting, enchantments, anvil, books, translation
 - **License:** MIT
 - **Source:** https://github.com/voltzz900/vast-enchanting
 - **Authors:** voltzz900
 
 ## Description
 
-The content half of Vast Enchanting: the Vast Enchanting Table, 18 shelves, three tomes and two archives, with art drawn by the mod's own code, their recipes, loot tables, item tags and names in English and Brazilian Portuguese. **The native mod `vastenchanting_native` does the work**, and both are needed.
+A native mod for enchanting, whose table follows the MIT code of [Apothic Enchanting](https://github.com/Shadows-of-Fire/Apothic-Enchanting) (by Shadows_of_Fire), with blocks, art, recipes and words of its own, on Horizon's mod API. One package: the code, blocks, items, art and words in English and Brazilian Portuguese.
 
-The art, recipes and words are this mod's own; Apothic Enchanting's assets and lang are all rights reserved and none of them are used.
+- **The Vast Enchanting Table** reads the shelves around it (the ring a vanilla table reads) for four stats: power (up to 100, the top offer's cost), chaos (how much offers vary), rarity (rare enchantments favoured, more enchantments per offer) and clues (how many are shown). Its offers go past vanilla's maximum levels. Its own screen shows the offers and the stats.
+- **18 shelves** in families (ember, tide, abyss, void, sight, and Vast Depths' metals), each raising power up to its own limit. A **relic shelf** lets the table offer treasure enchantments; a **veto shelf** holds five enchanted books whose enchantments the table won't offer.
+- **Infusions**: with the right stats the table turns an item into another (shelves into infused ones, tomes into better tomes, an archive into the next).
+- **Tomes** at the anvil take an item's enchantments into a book: about half (tattered), all of them (bound), or all of them and the item back plain and worn (siphon).
+- **Archives** keep enchanted books as points (two books of a level make one of the next) and write enchantments back onto books, one level at a time or as high as the points allow: up to level 16 (arcane) or 31 (void). A broken archive keeps everything in its item.
+
+**What it changes in the game**: the Vast Enchanting Table's offers and the levels and lapis they take, the anvil's result when a tome is on its right, a broken archive's drop (it carries what it held) and its contents when placed. It works through the mod API (block entity, menu and item Parts, the anvil and drop hooks; no mixins). Everything lives in the blocks' own data; no files, no network.
+
+0.2.0 replaces 0.1.0's two files (`vastenchanting_native` .hnmod and the `vastenchanting` content mod); blocks placed with 0.1 keep what they hold. Pinned to Horizon 702ab1e. Not yet: Apothic Enchanting's own enchantments (Horizon loads only the game's), typed tomes and the prismatic web. Not affiliated with or endorsed by Apothic Enchanting's authors; none of its assets or lang are used.
