@@ -4,7 +4,7 @@
 - **Icon:** `icons/vastenchanting.png`
 - **Name:** Vast Enchanting
 - **Summary:** An enchanting table that reads its shelves and goes past max levels, tomes for the anvil, and archives that store enchanted books.
-- **Categories:** game mechanics, magic, storage
+- **Categories:** game-mechanics, magic, storage
 - **Tags:** enchanting, enchantments, anvil, books, translation
 - **License:** MIT
 - **Source:** https://github.com/voltzz900/vast-enchanting
