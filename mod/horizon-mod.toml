@@ -1,6 +1,6 @@
 id = "vastenchanting"
 name = "Vast Enchanting"
-version = "0.2.1"
+version = "0.2.2"
 description = "An enchanting table read from the shelves around it: power, chaos, rarity and clues, offers past vanilla's levels, infusions, tomes and archives that keep enchantments."
 authors = ["voltzz900"]
 api = "0.2"

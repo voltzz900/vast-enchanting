@@ -21,6 +21,9 @@ pub const DATA_SLOTS: usize = CAP * 3;
 pub const BOOK_IN: usize = 0;
 pub const BOOK_OUT: usize = 1;
 
+/// The highest level any archive keeps (the void archive's); past it a level's points stop doubling.
+pub const MAX_LEVEL: u32 = 31;
+
 /// The highest level an archive keeps.
 pub fn cap_of(block: &str) -> Option<u32> {
     match block {
@@ -33,12 +36,12 @@ pub fn cap_of(block: &str) -> Option<u32> {
 // ---- the arithmetic ------------------------------------------------------------------------------------------------
 
 pub fn points_for(level: u32) -> i64 {
-    if level == 0 { 0 } else { 1i64 << (level.min(31) - 1) }
+    if level == 0 { 0 } else { 1i64 << (level.min(MAX_LEVEL) - 1) }
 }
 
-/// The highest level the points pay for from a plain book, no higher than `level`.
+/// The highest level the points pay for from a plain book, no higher than `level` (nor `MAX_LEVEL`).
 pub fn affordable(points: i64, level: u32) -> u32 {
-    (1..=level).rev().find(|l| points_for(*l) <= points).unwrap_or(0)
+    (1..=level.min(MAX_LEVEL)).rev().find(|l| points_for(*l) <= points).unwrap_or(0)
 }
 
 /// `count` books of `level` put into an archive keeping up to `cap` that held `points` and a highest `top`: the new
@@ -48,10 +51,13 @@ pub fn deposit(points: i64, top: u32, level: u32, count: u32, cap: u32) -> (i64,
 }
 
 /// Writing an enchantment at `current` on the book one level higher (or, with `max`, as high as the points allow):
-/// the level it reaches and the points it takes, or None when it can't.
+/// the level it reaches and the points it takes, or None when it can't. Never past `MAX_LEVEL`, so the search is short
+/// whatever the saved data says.
 pub fn extract(current: u32, points: i64, level: u32, max: bool) -> Option<(u32, i64)> {
+    let level = level.min(MAX_LEVEL);
     let pay = |target: u32| points_for(target) - points_for(current);
-    let target = if max { (current + 1..=level).rev().find(|t| pay(*t) <= points)? } else { current + 1 };
+    let next = current.checked_add(1)?;
+    let target = if max { (next..=level).rev().find(|t| pay(*t) <= points)? } else { next };
     (target > current && target <= level && pay(target) <= points).then(|| (target, pay(target)))
 }
 
@@ -76,18 +82,19 @@ pub fn rows(data: &[i32]) -> Vec<(usize, i64, u32)> {
     (0..CAP.min(ENCHANTMENTS.len()))
         .filter_map(|i| {
             let points = i64::from(data[i * 3] & 0x7FFF) | i64::from(data[i * 3 + 1] & 0x7FFF) << 15;
-            (points > 0).then_some((i, points, data[i * 3 + 2].max(0) as u32))
+            (points > 0).then_some((i, points, (data[i * 3 + 2].max(0) as u32).min(MAX_LEVEL)))
         })
         .collect()
 }
 
 // ---- saved data ----------------------------------------------------------------------------------------------------
 
-/// An enchantment's stored points and highest level.
-pub fn stored(nbt: &Compound, id: &str) -> (i64, u32) {
+/// An enchantment's stored points and highest level, the level no higher than the archive's `cap` (saved data from
+/// elsewhere may say anything).
+pub fn stored(nbt: &Compound, id: &str, cap: u32) -> (i64, u32) {
     let points = nbt::compound(nbt, "points").map_or(0, |c| nbt::get_i(c, id, 0).max(0) as i64);
     let level = nbt::compound(nbt, "levels").map_or(0, |c| nbt::get_i(c, id, 0).max(0) as u32);
-    (points, level)
+    (points, level.min(cap).min(MAX_LEVEL))
 }
 
 fn set_stored(nbt: &mut Compound, id: &str, points: i64, level: u32) {
@@ -100,8 +107,8 @@ fn set_stored(nbt: &mut Compound, id: &str, points: i64, level: u32) {
     nbt::set_i(nbt::compound_mut(nbt, "levels"), id, level as i32);
 }
 
-fn data_of(nbt: &Compound) -> Vec<i32> {
-    pack(|id| stored(nbt, id))
+fn data_of(nbt: &Compound, cap: u32) -> Vec<i32> {
+    pack(|id| stored(nbt, id, cap))
 }
 
 // ---- the block entity ----------------------------------------------------------------------------------------------
@@ -119,7 +126,7 @@ pub fn tick(event: &mut BlockEntityTickEvent<'_>, cap: u32) {
                 if enchant::index_of(id).is_none() {
                     continue;
                 }
-                let (points, top) = stored(nbt, id);
+                let (points, top) = stored(nbt, id, cap);
                 let (points, top) = deposit(points, top, *level, book.count(), cap);
                 set_stored(nbt, id, points, top);
             }
@@ -127,7 +134,7 @@ pub fn tick(event: &mut BlockEntityTickEvent<'_>, cap: u32) {
             changed = true;
         }
     }
-    let data = data_of(&event.entity.nbt);
+    let data = data_of(&event.entity.nbt, cap);
     if event.entity.data != data {
         event.entity.data = data;
         changed = true;
@@ -137,8 +144,9 @@ pub fn tick(event: &mut BlockEntityTickEvent<'_>, cap: u32) {
     }
 }
 
-/// A row clicked: `id` is the enchantment's index times two, plus one for "as high as the points allow".
-pub fn menu_button(event: &mut MenuButtonEvent<'_>) {
+/// A row clicked: `id` is the enchantment's index times two, plus one for "as high as the points allow"; `cap` is
+/// the highest level the archive keeps.
+pub fn menu_button(event: &mut MenuButtonEvent<'_>, cap: u32) {
     let keys = keys();
     let id = event.context.id;
     if id < 0 {
@@ -156,13 +164,13 @@ pub fn menu_button(event: &mut MenuButtonEvent<'_>) {
         return;
     }
     let current = on_book.iter().find(|(other, _)| other == ench.id).map_or(0, |(_, l)| *l);
-    let (points, level) = stored(&event.entity.nbt, ench.id);
+    let (points, level) = stored(&event.entity.nbt, ench.id, cap);
     let Some((target, pay)) = extract(current, points, level, max) else { return };
     let Some(mut out) = (if plain { to_enchanted_book(&keys, &book) } else { Some(book) }) else { return };
     nbt::enchant(&mut out, STORED, ench.id, target);
     event.entity.items[BOOK_OUT] = Some(out);
     set_stored(&mut event.entity.nbt, ench.id, points - pay, level);
-    event.entity.data = data_of(&event.entity.nbt);
+    event.entity.data = data_of(&event.entity.nbt, cap);
 }
 
 /// A plain book as an enchanted book, keeping its own components (a name).
@@ -261,6 +269,53 @@ mod tests {
     }
 
     #[test]
+    fn malformed_levels_are_bounded() {
+        // A huge saved level with too few points: the max search stops at MAX_LEVEL, at once.
+        assert_eq!(extract(0, 1, u32::MAX, true), Some((1, 1)));
+        assert_eq!(extract(0, 0, u32::MAX, true), None);
+        assert_eq!(extract(0, 0, u32::MAX, false), None);
+        assert_eq!(extract(0, i64::MAX, u32::MAX, true), Some((MAX_LEVEL, points_for(MAX_LEVEL))));
+        // A book already at a huge level: nothing to write, and no overflow.
+        assert_eq!(extract(u32::MAX, i64::MAX, u32::MAX, false), None);
+        assert_eq!(extract(u32::MAX, i64::MAX, u32::MAX, true), None);
+        assert_eq!(affordable(0, u32::MAX), 0);
+        assert_eq!(affordable(3, u32::MAX), 2);
+        assert_eq!(affordable(i64::MAX, u32::MAX), MAX_LEVEL);
+    }
+
+    #[test]
+    fn saved_levels_clamp_to_the_cap() {
+        let mut nbt = Compound::new();
+        nbt::set_i(nbt::compound_mut(&mut nbt, "points"), "minecraft:smite", 3);
+        nbt::set_i(nbt::compound_mut(&mut nbt, "levels"), "minecraft:smite", i32::MAX);
+        nbt::set_i(nbt::compound_mut(&mut nbt, "points"), "minecraft:power", -40);
+        nbt::set_i(nbt::compound_mut(&mut nbt, "levels"), "minecraft:power", -5);
+        assert_eq!(stored(&nbt, "minecraft:smite", 16), (3, 16));
+        assert_eq!(stored(&nbt, "minecraft:smite", 31), (3, 31));
+        assert_eq!(stored(&nbt, "minecraft:power", 16), (0, 0));
+        assert_eq!(stored(&nbt, "minecraft:power", 31), (0, 0));
+        // Too few points for anything past level 2, whatever the level says.
+        let (points, level) = stored(&nbt, "minecraft:smite", 16);
+        assert_eq!(extract(0, points, level, true), Some((2, 2)));
+        // The shown level is clamped too.
+        let data = pack(|id| stored(&nbt, id, 16));
+        let rows = rows(&data);
+        assert_eq!(rows.len(), 1);
+        assert_eq!((rows[0].1, rows[0].2), (3, 16));
+    }
+
+    #[test]
+    fn rows_clamp_shown_levels() {
+        let mut data = vec![0; DATA_SLOTS];
+        data[0] = 5;
+        data[2] = i32::MAX;
+        data[3] = 5;
+        data[5] = -9;
+        let rows = rows(&data);
+        assert_eq!(rows.iter().map(|r| r.2).collect::<Vec<_>>(), vec![MAX_LEVEL, 0]);
+    }
+
+    #[test]
     fn pack_round_trips() {
         let data = pack(|id| if id == "minecraft:sharpness" { (100_000, 9) } else { (0, 0) });
         let rows = rows(&data);
@@ -273,12 +328,12 @@ mod tests {
     fn saved_data_round_trips() {
         let mut nbt = Compound::new();
         set_stored(&mut nbt, "minecraft:smite", 64, 7);
-        assert_eq!(stored(&nbt, "minecraft:smite"), (64, 7));
+        assert_eq!(stored(&nbt, "minecraft:smite", 16), (64, 7));
         let tag = item_data(&nbt, ARCHIVE).expect("held");
         let Tag::Compound(c) = tag else { panic!("compound") };
-        assert_eq!(stored(&c, "minecraft:smite"), (64, 7));
+        assert_eq!(stored(&c, "minecraft:smite", 16), (64, 7));
         set_stored(&mut nbt, "minecraft:smite", 0, 7);
-        assert_eq!(stored(&nbt, "minecraft:smite"), (0, 0));
+        assert_eq!(stored(&nbt, "minecraft:smite", 16), (0, 0));
         assert!(item_data(&nbt, ARCHIVE).is_none());
     }
 }

@@ -121,7 +121,7 @@ impl BlockEntityPart for ArchivePart {
     }
 
     fn menu_button(&self, _host: &mut dyn ServerHost, event: &mut MenuButtonEvent<'_>) {
-        archive::menu_button(event);
+        archive::menu_button(event, self.cap);
     }
 
     fn screen(&self, _host: &dyn Host, event: &mut ScreenEvent<'_>) -> Option<Screen> {

@@ -11,8 +11,6 @@ use mod_api::{
     BlockEntityTickEvent, BlockEntityTickReply, Host, Identifier, ItemStack, LevelRef, MenuButtonEvent, ServerHost,
     Tag,
 };
-use std::collections::HashMap;
-use std::sync::Mutex;
 
 pub const TABLE: &str = "vastenchanting:vast_enchanting_table";
 pub const MENU: &str = "vastenchanting:table";
@@ -80,30 +78,28 @@ fn offers_for(host: &dyn Host, seed: i32, stats: Stats, stack: Option<&ItemStack
     enchant::offers(&items, seed, stats, Some(&input))
 }
 
-/// Each table's tick counter, kept out of its saved data so a tick changes nothing saved.
-static TICKS: Mutex<Option<HashMap<(String, [i32; 3]), u32>>> = Mutex::new(None);
-
-fn count_tick(dimension: &str, pos: [i32; 3]) -> u32 {
-    let Ok(mut ticks) = TICKS.lock() else { return 1 };
-    let map = ticks.get_or_insert_with(HashMap::new);
-    let t = map.entry((dimension.to_owned(), pos)).or_insert(0);
-    *t = t.wrapping_add(1);
-    *t
+/// Whether a table at `pos` refreshes at game time `time`: one tick in four, tables spread over the four by position.
+/// Read from the level's clock, so no state is kept per table (nothing to outlive a broken or unloaded one), and its
+/// saved data doesn't change on a tick that does nothing.
+fn due(time: i64, pos: [i32; 3]) -> bool {
+    let offset = i64::from(pos[0] ^ pos[1] ^ pos[2]);
+    time.wrapping_add(offset).rem_euclid(4) == 0
 }
 
 /// Every few ticks: the stats around the table and the offers for what lies on it, into the menu's data slots.
 pub fn tick(host: &mut dyn ServerHost, event: &mut BlockEntityTickEvent<'_>) {
     let pos = event.pos;
     let dimension = host.dimension();
-    let ready = event.entity.data.len() == DATA_SLOTS;
-    if count_tick(dimension, pos) % 4 != 1 && ready {
-        *event.reply = BlockEntityTickReply::Unchanged;
-        return;
-    }
     let Some(level) = host.level(dimension) else {
         *event.reply = BlockEntityTickReply::Unchanged;
         return;
     };
+    // Not ready (just placed, or an offer taken): at once. Without the level's clock: every tick.
+    let ready = event.entity.data.len() == DATA_SLOTS;
+    if ready && level.game_time(&*host).is_some_and(|time| !due(time, pos)) {
+        *event.reply = BlockEntityTickReply::Unchanged;
+        return;
+    }
     let mut changed = false;
     let mut seed = nbt::get_i(&event.entity.nbt, "seed", 0);
     if seed == 0 {
@@ -187,4 +183,22 @@ pub fn menu_button(host: &mut dyn ServerHost, event: &mut MenuButtonEvent<'_>) {
     }
     nbt::set_i(&mut event.entity.nbt, "seed", enchant::next_seed(seed, levels));
     event.entity.data.clear();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::due;
+
+    #[test]
+    fn one_tick_in_four() {
+        for pos in [[0, 64, 0], [-1, -60, -1], [i32::MIN, i32::MAX, 7], [30_000_000, 319, -30_000_000]] {
+            let due_ticks = (0..40).filter(|t| due(*t, pos)).count();
+            assert_eq!(due_ticks, 10, "{pos:?}");
+            assert_eq!(due_ticks, (-40..0).filter(|t| due(*t, pos)).count());
+            // The clock's ends wrap without a panic.
+            let _ = (due(i64::MAX, pos), due(i64::MIN, pos));
+        }
+        // Neighbouring tables don't all refresh on the same tick.
+        assert!((0..4).any(|x| due(0, [x, 64, 0]) != due(0, [0, 64, 0])));
+    }
 }
